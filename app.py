@@ -87,7 +87,7 @@ def create_header(content, language):
                 ui.input_action_button(
                     "language_switch",
                     content["switch_button"],
-                    class_="btn btn-outline-success btn-sm",
+                    class_="btn btn-outline-light btn-sm",
                 ),
                 style="position: absolute; top: 1rem; right: 1rem; z-index: 10;",
             ),
