@@ -6,9 +6,12 @@ import requests
 from urllib.parse import urlparse
 import base64
 from openpyxl import Workbook
+import io
+from PIL import Image, ImageDraw, ImageFont
+import textwrap
 
 try:
-    from dotenv import load_dotenv  # type: ignore
+    from dotenv import load_dotenv
 
     load_dotenv()
 except Exception:
@@ -75,6 +78,7 @@ waiver_content = {
     },
 }
 
+
 def create_header(content, language):
     return tags.div(
         tags.div(
@@ -96,7 +100,7 @@ def create_header(content, language):
                 tags.p(content["logo_subtext"], class_="small text-white-50 mb-0"),
                 class_="text-center",
             ),
-            class_="bg-success text-white p-4 position-relative",
+            class_="bg-dark text-dark p-4 position-relative",
             style="background: linear-gradient(135deg, #166534 0%, #15803d 100%) !important;",
         )
     )
@@ -142,7 +146,6 @@ def create_form_section(content):
     return tags.div(
         ui.tags.hr(class_="my-4"),
         ui.tags.div(
-            # Agreement checkbox
             ui.input_checkbox("agreement", content["agreement_check"], value=False),
             class_="mb-4",
         ),
@@ -266,6 +269,8 @@ app_ui = ui.page_fluid(
             border: 1px solid #ced4da !important;
             background-color: white !important;
         }
+    #submitting-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(0,0,0,0.45); }
+    #submitting-overlay .inner { color: #fff; font-weight: 500; font-size: 1.1rem; display:flex; align-items:center; gap:.75rem; }
     """
     ),
     ui.tags.script(
@@ -372,7 +377,6 @@ app_ui = ui.page_fluid(
                     const input = document.getElementById('signature_data');
                     if (input) {
                         input.value = dataURL;
-                        // Trigger change event for Shiny
                         input.dispatchEvent(new Event('input', { bubbles: true }));
                         input.dispatchEvent(new Event('change', { bubbles: true }));
                     }
@@ -396,6 +400,60 @@ app_ui = ui.page_fluid(
             initCanvas();
         });
         
+        async function captureScreenshot(){
+            console.log('[JS] captureScreenshot called');
+            if(!window.html2canvas) {
+                console.error('[JS] html2canvas not available');
+                return;
+            }
+            try{
+                const target = document.querySelector('.waiver-container') || document.body;
+                console.log('[JS] Target element for capture:', target);
+                window.scrollTo(0,0);
+                
+                const canvas = await html2canvas(target, {
+                    scale: 1,
+                    backgroundColor: '#ffffff',
+                    useCORS:true,
+                    logging:true,
+                    allowTaint: false,
+                    height: target.scrollHeight,
+                    width: target.scrollWidth,
+                    ignoreElements: el => {
+                        const ignore = el.id==='page_screenshot' || el.id==='signature_data' || el.id==='submitting-overlay';
+                        if (ignore) console.log('[JS] Ignoring element:', el.id);
+                        return ignore;
+                    }
+                });
+                
+                console.log('[JS] Canvas created:', canvas.width, 'x', canvas.height);
+                const dataURL = canvas.toDataURL('image/png');
+                console.log('[JS] DataURL created, length:', dataURL.length);
+                
+                const input = document.getElementById('page_screenshot');
+                console.log('[JS] Input element found:', !!input);
+                if (input){
+                    console.log('[JS] Current input value length:', input.value.length);
+                    if (!input.value || input.value.length < 100) {
+                        input.value = dataURL;
+                        console.log('[JS] Set input value, new length:', input.value.length);
+                        input.dispatchEvent(new Event('input',{bubbles:true}));
+                        input.dispatchEvent(new Event('change',{bubbles:true}));
+                        if(window.Shiny && window.Shiny.setInputValue){
+                            console.log('[JS] Using Shiny.setInputValue');
+                            Shiny.setInputValue('page_screenshot', dataURL, {priority:'event'});
+                        }
+                    } else {
+                        console.log('[JS] Input already has screenshot data');
+                    }
+                } else {
+                    console.error('[JS] page_screenshot input not found');
+                }
+            }catch(err){ 
+                console.error('[JS] captureScreenshot error', err); 
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
                 const submitButton = document.querySelector('button[id*="submit_waiver"]');
@@ -403,15 +461,18 @@ app_ui = ui.page_fluid(
                     console.log('[JS] Found submit button, adding screenshot capture listener');
                     submitButton.addEventListener('click', function(event) {
                         console.log('[JS] Submit button clicked - capturing screenshot immediately');
+                        const overlay = document.getElementById('submitting-overlay');
+                        if (overlay) overlay.style.display = 'flex';
                         
-                        if (window.html2canvas) {
-                            captureScreenshot().then(() => {
-                            }).catch(() => {
+                        setTimeout(() => {
+                            console.log('[JS] Attempting immediate screenshot capture');
+                            captureScreenshot().catch((err) => {
+                                console.error('[JS] Immediate capture failed:', err);
                             });
-                        } else {
-                        }
+                        }, 200);
                     }, true);
                 } else {
+                    console.log('[JS] Submit button not found');
                 }
             }, 1000);
         });
@@ -419,181 +480,349 @@ app_ui = ui.page_fluid(
     ),
     ui.tags.script(
         """
-        document.addEventListener('DOMContentLoaded', function() {
-            if (!window.html2canvas && !window._html2canvasLoading) {
-                console.log('[JS] Loading html2canvas library on page load...');
-                window._html2canvasLoading = true;
-                const s = document.createElement('script');
-                s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-                s.onload = () => { 
-                    window._html2canvasLoaded = true; 
-                    console.log('[JS] html2canvas loaded successfully on page load');
-                };
-                s.onerror = () => {
-                    console.error('[JS] Failed to load html2canvas on page load');
-                    window._html2canvasLoading = false;
-                };
-                document.head.appendChild(s);
-            }
-        });
-        
-        Shiny.addCustomMessageHandler('inject_html2canvas', function() {
-            if (window._html2canvasLoading || window.html2canvas) {
-                console.log('[JS] html2canvas already loaded or loading');
-                return;
-            }
-            console.log('[JS] Loading html2canvas library on demand...');
-            window._html2canvasLoading = true;
-            const s = document.createElement('script');
-            s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-            s.onload = () => { 
-                window._html2canvasLoaded = true; 
-                console.log('[JS] html2canvas loaded successfully on demand');
-            };
-            s.onerror = () => {
-                console.error('[JS] Failed to load html2canvas on demand');
-                window._html2canvasLoading = false;
-            };
-            document.head.appendChild(s);
-        });
-        Shiny.addCustomMessageHandler('capture_page_screenshot', async function() {
-            const timestamp = new Date().toLocaleTimeString();
-            console.log(`[JS] ${timestamp} - Screenshot capture handler called`);
-            console.log('[JS] html2canvas available:', !!window.html2canvas);
-            console.log('[JS] Document ready state:', document.readyState);
-            console.log('[JS] Current page scroll:', window.pageYOffset);
-            
-            if (document.readyState !== 'complete') {
-                console.log('[JS] Document not ready, waiting...');
-                setTimeout(() => {
-                    Shiny.addCustomMessageHandler('capture_page_screenshot')();
-                }, 500);
-                return;
-            }
-            
-            if (!window.html2canvas) { 
-                console.error('[JS] html2canvas not loaded - attempting to load now');
-                // Try to load it immediately
+        let screenshotMethods = {
+            html2canvas: null,
+            fallback: null
+        };
+
+        function loadHtml2Canvas() {
+            return new Promise((resolve) => {
+                if (window.html2canvas) {
+                    screenshotMethods.html2canvas = window.html2canvas;
+                    resolve(true);
+                    return;
+                }
+                
                 const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-                script.onload = function() {
-                    console.log('[JS] html2canvas loaded successfully, retrying capture');
-                    // Retry the capture after a brief delay
-                    setTimeout(() => captureScreenshot(), 300);
+                script.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
+                script.onload = () => {
+                    screenshotMethods.html2canvas = window.html2canvas;
+                    console.log('[JS] html2canvas loaded successfully');
+                    resolve(true);
                 };
-                script.onerror = function() {
-                    console.error('[JS] Failed to load html2canvas');
+                script.onerror = () => {
+                    console.log('[JS] html2canvas failed to load, will use fallback');
+                    resolve(false);
                 };
                 document.head.appendChild(script);
-                return; 
-            }
-            
-            setTimeout(() => captureScreenshot(), 200);
-        });
-        
-        async function captureScreenshot() {
-            console.log('[JS] Starting screenshot capture...');
-            
-            if (!window.html2canvas) {
-                console.error('[JS] html2canvas still not available in captureScreenshot');
-                return;
-            }
-            
-            try {
-                let targetElement = document.querySelector('.waiver-container');
-                if (!targetElement) {
-                    targetElement = document.body;
-                    console.log('[JS] Waiver container not found, using body');
-                } else {
-                    console.log('[JS] Found waiver container, capturing specific element');
-                }
-                
-                console.log('[JS] Target element:', targetElement);
-                console.log('[JS] Target element scroll height:', targetElement.scrollHeight);
-                console.log('[JS] Target element client height:', targetElement.clientHeight);
-                
-                window.scrollTo(0, 0);
-                
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                const agreementCheckbox = document.querySelector('input[type="checkbox"]') || 
-                                        document.querySelector('input[id*="agreement"]');
-                const nameInput = document.querySelector('input[type="text"]') || 
-                                document.querySelector('input[id*="participant_name"]');
-                const signatureCanvas = document.getElementById('signature-canvas');
-                
-                console.log('[JS] Form state check:');
-                console.log('  - Agreement checked:', agreementCheckbox ? agreementCheckbox.checked : 'not found');
-                console.log('  - Name filled:', nameInput ? (nameInput.value ? 'yes' : 'no') : 'not found');
-                console.log('  - Name input ID:', nameInput ? nameInput.id : 'not found');
-                console.log('  - Agreement ID:', agreementCheckbox ? agreementCheckbox.id : 'not found');
-                console.log('  - Signature canvas:', signatureCanvas ? 'found' : 'not found');
-                
-                const captureOptions = {
-                    scale: 1.2,
-                    useCORS: true,
-                    allowTaint: false,
-                    backgroundColor: '#f8f9fa',
-                    logging: false,
-                    ignoreElements: function(element) {
-                        return element.style.display === 'none' || 
-                               element.id === 'page_screenshot' || 
-                               element.id === 'signature_data';
+            });
+        }
+
+        function captureWithCanvas() {
+            return new Promise((resolve) => {
+                try {
+                    const waiver = document.querySelector('.waiver-container');
+                    if (!waiver) {
+                        resolve(null);
+                        return;
                     }
-                };
-                
-                if (targetElement.classList.contains('waiver-container')) {
-                    captureOptions.height = targetElement.scrollHeight;
-                    captureOptions.width = Math.max(targetElement.scrollWidth, 800);
-                } else {
-                    captureOptions.height = Math.max(document.body.scrollHeight, window.innerHeight);
-                    captureOptions.width = window.innerWidth;
-                }
-                
-                console.log('[JS] Capture dimensions:', captureOptions.width, 'x', captureOptions.height);
-                
-                const canvas = await html2canvas(targetElement, captureOptions);
-                
-                console.log('[JS] Canvas created:', canvas.width, 'x', canvas.height);
-                
-                const dataURL = canvas.toDataURL('image/png');
-                console.log('[JS] DataURL created, length:', dataURL.length);
-                
-                const input = document.getElementById('page_screenshot');
-                console.log('[JS] Input element found:', !!input);
-                console.log('[JS] Input element type:', input ? input.type : 'N/A');
-                console.log('[JS] Input element name:', input ? input.name : 'N/A');
-                console.log('[JS] Input current value length:', input ? input.value.length : 0);
-                
-                if (input) { 
-                    input.value = dataURL; 
-                    console.log('[JS] Input value set, length:', input.value.length);
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
                     
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    input.dispatchEvent(new Event('change', { bubbles: true })); 
+                    canvas.width = waiver.scrollWidth;
+                    canvas.height = waiver.scrollHeight;
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    ctx.fillStyle = '#000000';
+                    ctx.font = '14px Arial';
+                    
+                    const text = waiver.innerText || 'Waiver content captured';
+                    const lines = text.split('\\n');
+                    let y = 30;
+                    
+                    lines.forEach(line => {
+                        if (y < canvas.height - 20) {
+                            ctx.fillText(line.substring(0, 80), 20, y);
+                            y += 20;
+                        }
+                    });
+                    
+                    const sigCanvas = document.getElementById('signature-canvas');
+                    if (sigCanvas) {
+                        try {
+                            ctx.drawImage(sigCanvas, 20, y + 20);
+                        } catch (e) {
+                            console.log('[JS] Could not copy signature canvas');
+                        }
+                    }
+                    
+                    resolve(canvas.toDataURL('image/png'));
+                } catch (error) {
+                    console.error('[JS] Canvas fallback error:', error);
+                    resolve(null);
+                }
+            });
+        }
+
+        function captureWithSVG() {
+            return new Promise((resolve) => {
+                try {
+                    const waiver = document.querySelector('.waiver-container');
+                    if (!waiver) {
+                        resolve(null);
+                        return;
+                    }
+
+                    const serializer = new XMLSerializer();
+                    const rect = waiver.getBoundingClientRect();
+                    
+                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.setAttribute('width', rect.width);
+                    svg.setAttribute('height', rect.height);
+                    
+                    const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                    foreignObject.setAttribute('width', '100%');
+                    foreignObject.setAttribute('height', '100%');
+                    
+                    const clonedWaiver = waiver.cloneNode(true);
+                    foreignObject.appendChild(clonedWaiver);
+                    svg.appendChild(foreignObject);
+                    
+                    const svgString = serializer.serializeToString(svg);
+                    const dataURL = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+                    
+                    resolve(dataURL);
+                } catch (error) {
+                    console.error('[JS] SVG capture error:', error);
+                    resolve(null);
+                }
+            });
+        }
+
+        async function captureScreenshot() {
+            console.log('[JS] Starting enhanced screenshot capture...');
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const nameInput = document.querySelector('input[id*="participant_name"]');
+            const agreementCheckbox = document.querySelector('input[id*="agreement"]');
+            
+            if (nameInput && nameInput.value) {
+                console.log('[JS] Name input value:', nameInput.value);
+                nameInput.style.border = '1px solid #ced4da';
+                nameInput.style.backgroundColor = 'white';
+                nameInput.style.color = 'black';
+            }
+            
+            if (agreementCheckbox) {
+                console.log('[JS] Agreement checkbox checked:', agreementCheckbox.checked);
+                if (agreementCheckbox.checked) {
+                    agreementCheckbox.style.backgroundColor = '#0d6efd';
+                    agreementCheckbox.style.borderColor = '#0d6efd';
+                }
+            }
+            
+            let result = null;
+            
+            // Try html2canvas first
+            if (screenshotMethods.html2canvas) {
+                try {
+                    console.log('[JS] Attempting html2canvas capture...');
+                    const target = document.querySelector('.waiver-container') || document.body;
+                    window.scrollTo(0, 0);
+                    
+                    const canvas = await screenshotMethods.html2canvas(target, {
+                        scale: 1.5,
+                        backgroundColor: '#ffffff',
+                        useCORS: true,
+                        allowTaint: false,
+                        logging: false,
+                        height: target.scrollHeight,
+                        width: target.scrollWidth,
+                        onclone: function(clonedDoc) {
+                            const clonedNameInput = clonedDoc.querySelector('input[id*="participant_name"]');
+                            const clonedCheckbox = clonedDoc.querySelector('input[id*="agreement"]');
+                            
+                            if (clonedNameInput && nameInput && nameInput.value) {
+                                clonedNameInput.value = nameInput.value;
+                                clonedNameInput.setAttribute('value', nameInput.value);
+                                clonedNameInput.style.color = 'black';
+                                clonedNameInput.style.backgroundColor = 'white';
+                                clonedNameInput.style.border = '1px solid #ced4da';
+                            }
+                            
+                            if (clonedCheckbox && agreementCheckbox) {
+                                clonedCheckbox.checked = agreementCheckbox.checked;
+                                if (agreementCheckbox.checked) {
+                                    clonedCheckbox.setAttribute('checked', 'checked');
+                                    clonedCheckbox.style.backgroundColor = '#0d6efd';
+                                    clonedCheckbox.style.borderColor = '#0d6efd';
+                                }
+                            }
+                            
+                            const allInputs = target.querySelectorAll('input, textarea, select');
+                            const clonedInputs = clonedDoc.querySelectorAll('input, textarea, select');
+                            
+                            allInputs.forEach((input, index) => {
+                                if (clonedInputs[index]) {
+                                    clonedInputs[index].value = input.value;
+                                    if (input.type === 'checkbox' || input.type === 'radio') {
+                                        clonedInputs[index].checked = input.checked;
+                                    }
+                                }
+                            });
+                        },
+                        ignoreElements: (el) => {
+                            return el.id === 'page_screenshot' || 
+                                   el.id === 'signature_data' || 
+                                   el.id === 'submitting-overlay';
+                        }
+                    });
+                    
+                    result = canvas.toDataURL('image/png');
+                    console.log('[JS] html2canvas capture successful, size:', result.length);
+                } catch (error) {
+                    console.error('[JS] html2canvas capture failed:', error);
+                }
+            }
+            
+            if (!result) {
+                console.log('[JS] Attempting enhanced canvas fallback...');
+                result = await captureWithEnhancedCanvas();
+                if (result) {
+                    console.log('[JS] Enhanced canvas fallback successful, size:', result.length);
+                }
+            }
+            
+            if (!result) {
+                console.log('[JS] Attempting SVG fallback...');
+                result = await captureWithSVG();
+                if (result) {
+                    console.log('[JS] SVG fallback successful, size:', result.length);
+                }
+            }
+            
+            if (result) {
+                const input = document.getElementById('page_screenshot');
+                if (input) {
+                    input.value = result;
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
                     
                     if (window.Shiny && window.Shiny.setInputValue) {
-                        console.log('[JS] Also setting via Shiny.setInputValue');
-                        Shiny.setInputValue('page_screenshot', dataURL, {priority: 'event'});
+                        Shiny.setInputValue('page_screenshot', result, {priority: 'event'});
                     }
                     
-                    input.focus();
-                    input.blur();
-                    
-                    console.log('[JS] Screenshot captured and saved to input field successfully');
-                    
-                    
-                    setTimeout(() => {
-                        console.log('[JS] Verification - input value length after 100ms:', input.value.length);
-                    }, 100);
-                    
+                    console.log('[JS] Screenshot saved to input field');
                 } else {
-                    console.error('[JS] page_screenshot input element not found');
+                    console.error('[JS] page_screenshot input not found');
                 }
-            } catch (e) { 
-                console.error('[JS] Screenshot capture failed:', e); 
+            } else {
+                console.error('[JS] All screenshot methods failed');
             }
+            
+            return result;
         }
+
+        function captureWithEnhancedCanvas() {
+            return new Promise((resolve) => {
+                try {
+                    const waiver = document.querySelector('.waiver-container');
+                    if (!waiver) {
+                        resolve(null);
+                        return;
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    canvas.width = waiver.scrollWidth || 800;
+                    canvas.height = waiver.scrollHeight || 1200;
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    ctx.fillStyle = '#000000';
+                    ctx.font = '16px Arial';
+                    
+                    let y = 50;
+                    
+                    ctx.font = 'bold 20px Arial';
+                    ctx.fillText('BICYCLE PROGRAM WAIVER AND RELEASE FROM LIABILITY', 50, y);
+                    y += 40;
+                    
+                    const nameInput = document.querySelector('input[id*="participant_name"]');
+                    if (nameInput && nameInput.value) {
+                        ctx.font = '16px Arial';
+                        ctx.fillText('Participant Name: ' + nameInput.value, 50, y);
+                        y += 30;
+                    }
+                    
+                    const agreementCheckbox = document.querySelector('input[id*="agreement"]');
+                    if (agreementCheckbox) {
+                        ctx.fillText('Agreement: ' + (agreementCheckbox.checked ? '✓ Agreed' : '☐ Not Agreed'), 50, y);
+                        y += 30;
+                    }
+                    
+                    ctx.fillText('Date: ' + new Date().toLocaleDateString(), 50, y);
+                    y += 40;
+                    
+                    const sigCanvas = document.getElementById('signature-canvas');
+                    if (sigCanvas) {
+                        try {
+                            ctx.fillText('Signature:', 50, y);
+                            y += 20;
+                            ctx.drawImage(sigCanvas, 50, y);
+                            y += 160;
+                        } catch (e) {
+                            ctx.fillText('Signature: [Signature Present]', 50, y);
+                            y += 30;
+                        }
+                    }
+                    
+                    const textContent = waiver.innerText || '';
+                    const lines = textContent.split('\n').filter(line => line.trim().length > 0);
+                    ctx.font = '12px Arial';
+                    
+                    lines.slice(0, 50).forEach(line => {
+                        if (y < canvas.height - 30) {
+                            const words = line.split(' ');
+                            let currentLine = '';
+                            
+                            words.forEach(word => {
+                                const testLine = currentLine + word + ' ';
+                                const metrics = ctx.measureText(testLine);
+                                
+                                if (metrics.width > canvas.width - 100) {
+                                    ctx.fillText(currentLine, 50, y);
+                                    currentLine = word + ' ';
+                                    y += 15;
+                                } else {
+                                    currentLine = testLine;
+                                }
+                            });
+                            
+                            if (currentLine.trim().length > 0) {
+                                ctx.fillText(currentLine, 50, y);
+                                y += 15;
+                            }
+                        }
+                    });
+                    
+                    resolve(canvas.toDataURL('image/png'));
+                } catch (error) {
+                    console.error('[JS] Enhanced canvas fallback error:', error);
+                    resolve(null);
+                }
+            });
+        }
+
+        Shiny.addCustomMessageHandler('capture_page_screenshot', async () => {
+            console.log('[JS] capture_page_screenshot handler called');
+            await captureScreenshot();
+        });
+        
+        Shiny.addCustomMessageHandler('hide_submitting_overlay', () => {
+            const ov = document.getElementById('submitting-overlay');
+            if (ov) ov.style.display = 'none';
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadHtml2Canvas();
+        });
         """
     ),
     tags.div(
@@ -612,6 +841,16 @@ app_ui = ui.page_fluid(
             value="",
         ),
         style="display: none;",
+    ),
+    ui.tags.div(
+        ui.tags.div(
+            ui.tags.div(
+                class_="spinner-border text-light spinner-border-sm", role="status"
+            ),
+            ui.tags.span("Submitting..."),
+            class_="inner",
+        ),
+        id="submitting-overlay",
     ),
 )
 
@@ -695,8 +934,14 @@ def server(input, output, session):
                 headers = ["Name", "Date", "Language", "Timestamp", "Screenshot_File"]
                 for idx, header in enumerate(headers, 1):
                     ws.cell(row=1, column=idx, value=header)
-                
-                sample_row = ["Sample Name", "2024-01-01", "en", "2024-01-01 12:00:00", "Sample_Name_20240101_screenshot.png"]
+
+                sample_row = [
+                    "Sample Name",
+                    "2024-01-01",
+                    "en",
+                    "2024-01-01 12:00:00",
+                    "Sample_Name_20240101_screenshot.png",
+                ]
                 for idx, value in enumerate(sample_row, 1):
                     ws.cell(row=2, column=idx, value=value)
 
@@ -754,7 +999,7 @@ def server(input, output, session):
 
             date_obj = datetime.fromisoformat(waiver_data.get("date", ""))
             formatted_date = date_obj.strftime("%Y-%m-%d")
-            
+
             row_values = [
                 waiver_data.get("name", ""),
                 formatted_date,
@@ -783,55 +1028,304 @@ def server(input, output, session):
                     session_url,
                     headers={
                         "Authorization": f"Bearer {token}",
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
                     },
                     json={"persistChanges": True},
-                    timeout=20
+                    timeout=20,
                 )
-                
+
                 if session_resp.status_code < 300:
                     session_id = session_resp.json().get("id")
                     print(f"[graph] Created workbook session: {session_id[:8]}...")
-                    
+
                     table_url = f"https://graph.microsoft.com/v1.0/sites/{sp_site_id}/drive/root:/{file_path_enc}:/workbook/tables/{SHAREPOINT_TABLE_NAME}/rows/add"
                     table_resp = requests.post(
                         table_url,
                         headers={
                             "Authorization": f"Bearer {token}",
                             "Content-Type": "application/json",
-                            "workbook-session-id": session_id
+                            "workbook-session-id": session_id,
                         },
                         json=body,
-                        timeout=20
+                        timeout=20,
                     )
-                    
+
                     if table_resp.status_code < 300:
                         print("[graph] Excel row appended successfully using session")
                         return True
                     else:
-                        print(f"[graph] Failed to append Excel row with session: {table_resp.status_code} - {table_resp.text[:200]}")
+                        print(
+                            f"[graph] Failed to append Excel row with session: {table_resp.status_code} - {table_resp.text[:200]}"
+                        )
                         return False
                 else:
-                    print(f"[graph] Failed to create workbook session: {session_resp.status_code} - {session_resp.text[:200]}")
+                    print(
+                        f"[graph] Failed to create workbook session: {session_resp.status_code} - {session_resp.text[:200]}"
+                    )
                     return False
-                    
-                print(f"[graph] Failed to append Excel row: {r.status_code} - {r.text[:200]}")
+
+                print(
+                    f"[graph] Failed to append Excel row: {r.status_code} - {r.text[:200]}"
+                )
                 return False
         except Exception as e:
             print(f"[graph] Excel append error: {e}")
             return False
+
+    def create_waiver_screenshot(waiver_data, content):
+        """Create a server-side screenshot/image of the waiver data"""
+        try:
+            width = 850
+            height = 1600
+
+            img = Image.new("RGB", (width, height), "white")
+            draw = ImageDraw.Draw(img)
+
+            try:
+                title_font = ImageFont.truetype(
+                    "/System/Library/Fonts/Helvetica.ttc", 20
+                )
+                header_font = ImageFont.truetype(
+                    "/System/Library/Fonts/Helvetica.ttc", 16
+                )
+                normal_font = ImageFont.truetype(
+                    "/System/Library/Fonts/Helvetica.ttc", 12
+                )
+                small_font = ImageFont.truetype(
+                    "/System/Library/Fonts/Helvetica.ttc", 10
+                )
+            except:
+                try:
+                    title_font = ImageFont.load_default()
+                    header_font = ImageFont.load_default()
+                    normal_font = ImageFont.load_default()
+                    small_font = ImageFont.load_default()
+                except:
+                    title_font = header_font = normal_font = small_font = None
+
+            y = 30
+            margin = 40
+
+            title_text = content["title"]
+            if title_font:
+                title_lines = textwrap.wrap(title_text, width=50)
+                for line in title_lines:
+                    draw.text((margin, y), line, fill="black", font=title_font)
+                    y += 25
+            else:
+                draw.text((margin, y), title_text[:80], fill="black")
+                y += 25
+
+            y += 20
+
+            draw.text(
+                (margin, y),
+                content["logo_text1"],
+                fill="black",
+                font=header_font or title_font,
+            )
+            y += 20
+            draw.text(
+                (margin, y),
+                content["logo_subtext"],
+                fill="black",
+                font=normal_font or title_font,
+            )
+            y += 30
+
+            draw.text(
+                (margin, y),
+                "FORM SUBMISSION DETAILS:",
+                fill="black",
+                font=header_font or title_font,
+            )
+            y += 25
+
+            name_text = f"Participant Name: {waiver_data.get('name', 'N/A')}"
+            draw.text(
+                (margin, y), name_text, fill="black", font=normal_font or title_font
+            )
+            y += 20
+
+            agreement_text = f"Agreement Status: {'✓ AGREED' if waiver_data.get('agreement', False) else '☐ NOT AGREED'}"
+            draw.text(
+                (margin, y),
+                agreement_text,
+                fill="black",
+                font=normal_font or title_font,
+            )
+            y += 20
+
+            date_text = f"Date: {waiver_data.get('timestamp', 'N/A')}"
+            draw.text(
+                (margin, y), date_text, fill="black", font=normal_font or title_font
+            )
+            y += 20
+
+            lang_text = f"Language: {'English' if waiver_data.get('language') == 'en' else 'Spanish'}"
+            draw.text(
+                (margin, y), lang_text, fill="black", font=normal_font or title_font
+            )
+            y += 30
+
+            draw.text(
+                (margin, y), "SIGNATURE:", fill="black", font=header_font or title_font
+            )
+            y += 25
+
+            signature_data = waiver_data.get("signature", "")
+            if signature_data and signature_data.startswith("data:image"):
+                try:
+                    header, encoded = signature_data.split(",", 1)
+                    signature_bytes = base64.b64decode(encoded)
+                    signature_img = Image.open(io.BytesIO(signature_bytes))
+
+                    if signature_img.mode != "RGBA":
+                        signature_img = signature_img.convert("RGBA")
+
+                    sig_width = min(400, signature_img.width)
+                    sig_height = int(
+                        signature_img.height * (sig_width / signature_img.width)
+                    )
+                    signature_img = signature_img.resize(
+                        (sig_width, sig_height), Image.Resampling.LANCZOS
+                    )
+
+                    sig_background = Image.new("RGB", (sig_width, sig_height), "white")
+
+                    if signature_img.mode == "RGBA":
+                        sig_background.paste(signature_img, (0, 0), signature_img)
+                    else:
+                        sig_background.paste(signature_img, (0, 0))
+
+                    img.paste(sig_background, (margin, y))
+                    y += sig_height + 10
+                    print(
+                        f"[screenshot] Successfully processed signature: {sig_width}x{sig_height}"
+                    )
+                except Exception as e:
+                    print(f"[screenshot] Could not process signature: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+                    draw.text(
+                        (margin, y),
+                        "[Signature Present - Could not display]",
+                        fill="black",
+                        font=normal_font or title_font,
+                    )
+                    y += 20
+            else:
+                draw.text(
+                    (margin, y),
+                    "[No signature provided]",
+                    fill="black",
+                    font=normal_font or title_font,
+                )
+                y += 20
+
+            y += 20
+
+            draw.text(
+                (margin, y),
+                "WAIVER CONTENT:",
+                fill="black",
+                font=header_font or title_font,
+            )
+            y += 25
+
+            intro_lines = textwrap.wrap(content["intro"], width=90)
+            for line in intro_lines[:12]:
+                draw.text(
+                    (margin, y), line, fill="black", font=small_font or normal_font
+                )
+                y += 12
+                if y > height - 150:
+                    break
+
+            y += 15
+
+            if y < height - 300:
+                for i, point in enumerate(content["points"][:4], 1):
+                    point_lines = textwrap.wrap(f"{i}. {point}", width=85)
+                    for line in point_lines[:4]:
+                        draw.text(
+                            (margin, y),
+                            line,
+                            fill="black",
+                            font=small_font or normal_font,
+                        )
+                        y += 12
+                        if y > height - 200:
+                            break
+                    y += 8
+                    if y > height - 200:
+                        break
+
+            if y < height - 250:
+                sub_points = content.get("sub_points", [])
+                for i, sub_point in enumerate(sub_points[:3], 1):
+                    sub_lines = textwrap.wrap(f"  • {sub_point}", width=80)
+                    for line in sub_lines[:3]:
+                        draw.text(
+                            (margin + 20, y),
+                            line,
+                            fill="black",
+                            font=small_font or normal_font,
+                        )
+                        y += 12
+                        if y > height - 150:
+                            break
+                    y += 5
+                    if y > height - 150:
+                        break
+
+            if y < height - 120:
+                y += 15
+                draw.text(
+                    (margin, y),
+                    "IMPORTANT:",
+                    fill="black",
+                    font=header_font or title_font,
+                )
+                y += 20
+                final_lines = textwrap.wrap(content["final_agreement"], width=85)
+                for line in final_lines[:8]:
+                    draw.text(
+                        (margin, y), line, fill="black", font=small_font or normal_font
+                    )
+                    y += 12
+                    if y > height - 80:
+                        break
+
+            buffer = io.BytesIO()
+            img.save(buffer, format="PNG")
+            buffer.seek(0)
+            img_base64 = base64.b64encode(buffer.getvalue()).decode()
+
+            return f"data:image/png;base64,{img_base64}"
+
+        except Exception as e:
+            print(f"[screenshot] Error creating waiver screenshot: {e}")
+            return None
 
     def upload_screenshot_with_participant_name(
         token: str, sp_site_id: str, b64data: str, participant_name: str, timestamp: str
     ):
         print("[graph] Starting screenshot upload function")
         print(f"[graph] Data validation - b64data exists: {bool(b64data)}")
-        print(f"[graph] Data validation - starts with data:image: {b64data.startswith('data:image') if b64data else False}")
+        print(
+            f"[graph] Data validation - starts with data:image: {b64data.startswith('data:image') if b64data else False}"
+        )
         print(f"[graph] Data validation - participant name: '{participant_name}'")
-        print(f"[graph] Data validation - site_id: '{sp_site_id[:20] if sp_site_id else 'None'}...'")
-        
+        print(
+            f"[graph] Data validation - site_id: '{sp_site_id[:20] if sp_site_id else 'None'}...'"
+        )
+
         if not (b64data and b64data.startswith("data:image")):
-            print(f"[graph] Screenshot upload failed validation - b64data: {bool(b64data)}, starts with data:image: {b64data.startswith('data:image') if b64data else False}")
+            print(
+                f"[graph] Screenshot upload failed validation - b64data: {bool(b64data)}, starts with data:image: {b64data.startswith('data:image') if b64data else False}"
+            )
             return False
         try:
             import re
@@ -843,51 +1337,57 @@ def server(input, output, session):
                 "/".join(SHAREPOINT_EXCEL_FILE_PATH.split("/")[:-1])
                 or "Shared Documents"
             )
-            
+
             print(f"[graph] SHAREPOINT_EXCEL_FILE_PATH: '{SHAREPOINT_EXCEL_FILE_PATH}'")
             print(f"[graph] Calculated folder_path: '{folder_path}'")
-            
+
             screenshots_folder = f"{folder_path}/screenshots"
             print(f"[graph] Screenshots folder path: '{screenshots_folder}'")
-            
+
             create_folder_url = f"https://graph.microsoft.com/v1.0/sites/{sp_site_id}/drive/root:/{folder_path.replace(' ', '%20')}:/children"
             folder_data = {
                 "name": "screenshots",
                 "folder": {},
-                "@microsoft.graph.conflictBehavior": "replace"
+                "@microsoft.graph.conflictBehavior": "replace",
             }
-            
+
             folder_resp = requests.post(
                 create_folder_url,
                 headers={
                     "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 json=folder_data,
-                timeout=20
+                timeout=20,
             )
-            
+
             if folder_resp.status_code < 300 or folder_resp.status_code == 409:
                 print("[graph] Screenshots folder ready for use")
             else:
-                print(f"[graph] Screenshots folder creation response: {folder_resp.status_code} - {folder_resp.text[:100]}")
+                print(
+                    f"[graph] Screenshots folder creation response: {folder_resp.status_code} - {folder_resp.text[:100]}"
+                )
 
             date_str = datetime.now().strftime("%Y%m%d")
             filename = f"{clean_name}_{date_str}_screenshot.png"
 
             file_api = f"https://graph.microsoft.com/v1.0/sites/{sp_site_id}/drive/root:/{screenshots_folder.replace(' ', '%20')}/{filename}:/content"
-            
+
             print(f"[graph] Upload URL: '{file_api}'")
 
             try:
                 header, encoded = b64data.split(",", 1)
                 binary = base64.b64decode(encoded)
-                print(f"[graph] Successfully decoded base64 data, binary size: {len(binary)} bytes")
+                print(
+                    f"[graph] Successfully decoded base64 data, binary size: {len(binary)} bytes"
+                )
             except Exception as decode_error:
                 print(f"[graph] Failed to decode base64 data: {decode_error}")
                 return False
-            
-            print(f"[graph] Uploading screenshot to SharePoint: {filename} (size: {len(binary)} bytes)")
+
+            print(
+                f"[graph] Uploading screenshot to SharePoint: {filename} (size: {len(binary)} bytes)"
+            )
             print(f"[graph] Token length: {len(token)} characters")
 
             try:
@@ -914,13 +1414,11 @@ def server(input, output, session):
             print(f"[graph] Screenshot upload error: {e}")
             return False
 
-    @output
     @render.ui
     def header_section():
         content = waiver_content[language.get()]
         return create_header(content, language.get())
 
-    @output
     @render.ui
     def main_content():
         if is_submitted.get():
@@ -932,6 +1430,15 @@ def server(input, output, session):
                         content["success_message"], class_="h4 fw-bold text-success"
                     ),
                     class_="success-message",
+                ),
+                ui.tags.script(
+                    """
+                    // Hide overlay when success page is shown
+                    setTimeout(function() {
+                        const overlay = document.getElementById('submitting-overlay');
+                        if (overlay) overlay.style.display = 'none';
+                    }, 100);
+                    """
                 ),
                 class_="p-4",
             )
@@ -1001,44 +1508,21 @@ def server(input, output, session):
 
     @reactive.Effect
     async def inject_html2canvas():
-        # Load html2canvas as soon as the app starts
         await session.send_custom_message("inject_html2canvas", {})
-
-    
 
     @reactive.Effect
     @reactive.event(input.submit_waiver)
     async def submit_waiver():
-        import asyncio
-        
         if not (
             input.agreement() and input.participant_name() and input.signature_data()
         ):
+            await session.send_custom_message("hide_submitting_overlay", {})
             return
         if submitting.get():
+            await session.send_custom_message("hide_submitting_overlay", {})
             return
 
-        print("[submit] Checking for existing screenshot data...")
-        current_screenshot_length = len(input.page_screenshot()) if hasattr(input, 'page_screenshot') and input.page_screenshot() else 0
-        print(f"[submit] Current page_screenshot value length: {current_screenshot_length}")
-        
-        if current_screenshot_length == 0:
-            await session.send_custom_message("capture_page_screenshot", {})
-            
-            screenshot_captured = False
-            for attempt in range(15):  # Wait up to 7.5 seconds
-                await asyncio.sleep(0.5)
-                current_length = len(input.page_screenshot()) if hasattr(input, "page_screenshot") and input.page_screenshot() else 0
-                if current_length > 0:
-                    print(f"[submit] Screenshot captured successfully, size: {current_length}")
-                    screenshot_captured = True
-                    break
-                print(f"[submit] Waiting for screenshot, attempt {attempt + 1}")
-            
-            if not screenshot_captured:
-                print("[submit] Screenshot capture failed, proceeding without screenshot")
-        else:
-            print(f"[submit] Using existing screenshot data, size: {current_screenshot_length}")
+        print("[submit] Starting waiver submission...")
 
         submitting.set(True)
         ui.update_action_button(
@@ -1049,30 +1533,38 @@ def server(input, output, session):
 
         today = datetime.now()
         screenshot_data = ""
-        
-        print("[submit] Checking for screenshot data...")
-        print(f"[submit] hasattr(input, 'page_screenshot'): {hasattr(input, 'page_screenshot')}")
-        if hasattr(input, "page_screenshot"):
-            raw_screenshot = input.page_screenshot()
-            print(f"[submit] input.page_screenshot() exists: {bool(raw_screenshot)}")
-            print(f"[submit] input.page_screenshot() length: {len(raw_screenshot) if raw_screenshot else 0}")
-            if raw_screenshot:
-                print(f"[submit] Screenshot data preview: {raw_screenshot[:50]}...")
-                screenshot_data = raw_screenshot
+
+        print("[submit] Generating server-side screenshot...")
+
+        current_lang = language.get()
+        current_content = waiver_content[current_lang]
+
+        waiver_form_data = {
+            "name": input.participant_name(),
+            "agreement": True,
+            "signature": input.signature_data(),
+            "timestamp": today.strftime("%Y-%m-%d %H:%M:%S"),
+            "language": language.get(),
+        }
+
+        screenshot_data = create_waiver_screenshot(waiver_form_data, current_content)
+
+        if screenshot_data:
+            print(
+                f"[submit] Generated server-side screenshot: {len(screenshot_data)} bytes"
+            )
         else:
-            print("[submit] No page_screenshot attribute on input object")
-            
-        if not screenshot_data:
-            print("[submit] No screenshot data available for upload")
-            
- 
+            print("[submit] Failed to generate server-side screenshot")
+            screenshot_data = None
+
         clean_name = input.participant_name().strip()
         import re
+
         clean_name = re.sub(r"[^\w\s-]", "", clean_name)
         clean_name = re.sub(r"[-\s]+", "_", clean_name)
         date_str = today.strftime("%Y%m%d")
         screenshot_filename = f"{clean_name}_{date_str}_screenshot.png"
-        
+
         waiver_data = {
             "name": input.participant_name(),
             "signature": input.signature_data(),
@@ -1082,7 +1574,6 @@ def server(input, output, session):
             "screenshot": screenshot_data,
             "screenshot_filename": screenshot_filename,
         }
-
 
         if not have_graph_config():
             print("[graph] SharePoint configuration is missing")
@@ -1094,8 +1585,9 @@ def server(input, output, session):
             status_type.set("danger")
             is_submitted.set(False)
             submitting.set(False)
+            await session.send_custom_message("hide_submitting_overlay", {})
             return
-            
+
         if have_graph_config():
             try:
                 token = graph_token()
@@ -1113,10 +1605,14 @@ def server(input, output, session):
                             status_type.set("danger")
                         else:
                             print("[graph] Successfully appended data to Excel.")
-                            
+
                         if waiver_data.get("screenshot"):
-                            print(f"[graph] About to upload screenshot for {waiver_data['name']}, data size: {len(waiver_data['screenshot'])}")
-                            print(f"[graph] Screenshot data preview: {waiver_data['screenshot'][:50]}...")
+                            print(
+                                f"[graph] About to upload screenshot for {waiver_data['name']}, data size: {len(waiver_data['screenshot'])}"
+                            )
+                            print(
+                                f"[graph] Screenshot data preview: {waiver_data['screenshot'][:50]}..."
+                            )
                             screenshot_path = upload_screenshot_with_participant_name(
                                 token,
                                 sid,
@@ -1127,10 +1623,14 @@ def server(input, output, session):
                             if screenshot_path:
                                 print(f"[graph] Screenshot saved to: {screenshot_path}")
                             else:
-                                print("[graph] Failed to upload screenshot to SharePoint")
+                                print(
+                                    "[graph] Failed to upload screenshot to SharePoint"
+                                )
                         else:
                             print("[graph] No screenshot data to upload")
-                            print(f"[graph] Waiver data keys: {list(waiver_data.keys())}")
+                            print(
+                                f"[graph] Waiver data keys: {list(waiver_data.keys())}"
+                            )
                             if waiver_data.get("screenshot") == "":
                                 print("[graph] Screenshot data is empty string")
                     else:
@@ -1141,6 +1641,7 @@ def server(input, output, session):
                             else "Error al conectar con el sitio de SharePoint."
                         )
                         status_type.set("danger")
+                        await session.send_custom_message("hide_submitting_overlay", {})
                 else:
                     print("[graph] Failed to get Microsoft Graph token")
                     status_message.set(
@@ -1149,6 +1650,7 @@ def server(input, output, session):
                         else "Error de autenticación con SharePoint."
                     )
                     status_type.set("danger")
+                    await session.send_custom_message("hide_submitting_overlay", {})
             except Exception as e:
                 print(f"[graph] SharePoint submission error: {e}")
                 status_message.set(
@@ -1157,6 +1659,7 @@ def server(input, output, session):
                     else "Error al conectar con SharePoint."
                 )
                 status_type.set("danger")
+                await session.send_custom_message("hide_submitting_overlay", {})
 
         is_submitted.set(True)
         submitting.set(False)
@@ -1167,6 +1670,7 @@ def server(input, output, session):
         )
         status_type.set("success")
         print(f"Waiver submitted - Participant: {waiver_data['name']}")
+        await session.send_custom_message("hide_submitting_overlay", {})
 
 
 app = App(app_ui, server)
