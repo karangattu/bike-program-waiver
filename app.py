@@ -89,130 +89,132 @@ def create_header(content, language):
                     content["switch_button"],
                     class_="btn btn-outline-light btn-sm",
                 ),
-                style="position: absolute; top: 1rem; right: 1rem; z-index: 10;",
+                style="position: absolute; top: 1.5rem; right: 1.5rem; z-index: 10;",
             ),
             tags.div(
-                tags.img(
-                    src="https://images.squarespace-cdn.com/content/v1/5622cd82e4b0501d40689558/cdab4aef-0027-40b7-9737-e2f893586a6a/Hopes_Corner_Logo_Green.png?format=500w",
-                    alt="Hope's Corner Logo",
-                    style="height: 80px; object-fit: contain; background: rgba(255,255,255,0.95); padding: 8px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1rem;",
+                tags.div(
+                    tags.img(
+                        src="https://images.squarespace-cdn.com/content/v1/5622cd82e4b0501d40689558/cdab4aef-0027-40b7-9737-e2f893586a6a/Hopes_Corner_Logo_Green.png?format=500w",
+                        alt="Hope's Corner Logo",
+                        style="height: 90px; object-fit: contain; margin-bottom: 1rem;",
+                    ),
+                    class_="logo-container text-center",
                 ),
-                tags.h1(content["logo_text1"], class_="h3 fw-bold text-white mb-1"),
-                tags.p(content["logo_subtext"], class_="small text-white-50 mb-0"),
+                tags.h1(content["logo_text1"], class_="h2 fw-bold text-white mb-2"),
+                tags.p(content["logo_subtext"], class_="text-white opacity-75 mb-0 fw-medium"),
                 class_="text-center",
             ),
-            class_="bg-dark text-dark p-4 position-relative",
-            style="background: linear-gradient(135deg, #166534 0%, #15803d 100%) !important;",
+            class_="header-section text-dark p-5 position-relative",
         )
     )
 
 
 def create_waiver_content(content):
     return ui.tags.div(
-        ui.tags.h3(content["title"], class_="h4 fw-bold text-center mb-4"),
+        ui.tags.h3(content["title"], class_="waiver-title"),
         ui.tags.div(
-            ui.tags.p(content["intro"], class_="mb-3"),
+            ui.tags.p(content["intro"], class_="mb-4"),
             ui.tags.ol(
-                ui.tags.li(content["points"][0], class_="mb-2"),
-                ui.tags.li(content["points"][1], class_="mb-2"),
+                ui.tags.li(content["points"][0], class_="mb-3"),
+                ui.tags.li(content["points"][1], class_="mb-3"),
                 ui.tags.li(
                     content["points"][2],
                     ui.tags.ol(
                         *[
-                            ui.tags.li(point, class_="mb-1")
+                            ui.tags.li(point, class_="mb-2")
                             for point in content["sub_points"]
                         ],
                         type="a",
-                        class_="mt-2 ps-3",
+                        class_="mt-3 ps-3",
                     ),
-                    class_="mb-2",
+                    class_="mb-3",
                 ),
                 class_="ps-3",
             ),
+            ui.tags.hr(class_="divider"),
             tags.p(content["volunteer_clause"], class_="mb-3"),
             tags.p(content["indemnify_clause"], class_="mb-3"),
-            tags.p(content["release_clause"], class_="mb-3"),
+            tags.p(content["release_clause"], class_="mb-4"),
             tags.div(
                 tags.p(
-                    content["final_agreement"], class_="fw-bold small text-uppercase"
+                    content["final_agreement"], class_="fw-bold text-danger mb-0"
                 ),
-                class_="alert alert-warning border-start border-warning border-4 bg-warning bg-opacity-10",
+                class_="alert alert-warning border-start border-warning border-4 bg-warning bg-opacity-10 rounded-3",
             ),
-            class_="small lh-base",
+            class_="waiver-content",
         ),
     )
 
 
 def create_form_section(content):
     return tags.div(
-        ui.tags.hr(class_="my-4"),
-        ui.tags.div(
-            ui.input_checkbox("agreement", content["agreement_check"], value=False),
-            class_="mb-4",
-        ),
+        ui.tags.hr(class_="divider"),
         ui.tags.div(
             ui.tags.div(
-                ui.input_text(
-                    "participant_name",
-                    content["print_name_label"],
-                    placeholder="Enter your full name",
-                ),
-                class_="col-md-6 mb-3",
+                ui.input_checkbox("agreement", content["agreement_check"], value=False),
+                class_="mb-4",
             ),
             ui.tags.div(
-                ui.tags.label(
-                    content["signature_label"], class_="form-label fw-medium"
-                ),
-                ui.tags.div(
-                    ui.tags.canvas(
-                        id="signature-canvas",
-                        width="400",
-                        height="150",
-                        style="border: 2px solid #ddd; border-radius: 8px; cursor: crosshair; touch-action: none; width: 100%; max-width: 400px; background: white;",
-                    ),
-                    ui.tags.div(
-                        ui.tags.button(
-                            "Clear Signature",
-                            type="button",
-                            id="clear-signature",
-                            class_="btn btn-outline-secondary btn-sm me-2",
-                        ),
-                        ui.tags.span(
-                            "✓",
-                            id="signature-check",
-                            style="color: green; font-weight: bold; display: none;",
-                        ),
-                        class_="mt-2",
-                    ),
-                    ui.tags.div(
-                        "Sign here with your finger or mouse",
-                        class_="text-muted small mt-1",
-                    ),
-                ),
                 ui.tags.div(
                     ui.input_text(
-                        "signature_data",
-                        None,
-                        value="",
+                        "participant_name",
+                        content["print_name_label"],
+                        placeholder="Enter your full name",
                     ),
-                    style="display: none;",
+                    class_="col-md-6 mb-4",
                 ),
-                class_="col-md-6 mb-3",
+                ui.tags.div(
+                    ui.tags.label(
+                        content["signature_label"], class_="form-label fw-medium mb-3"
+                    ),
+                    ui.tags.div(
+                        ui.tags.canvas(
+                            id="signature-canvas",
+                            width="450",
+                            height="180",
+                            style="width: 100%; max-width: 450px;",
+                        ),
+                        ui.tags.div(
+                            ui.tags.button(
+                                "✨ Clear Signature",
+                                type="button",
+                                id="clear-signature",
+                                class_="btn btn-outline-secondary btn-sm me-3",
+                            ),
+                            ui.tags.span(
+                                "✓ Signature captured",
+                                id="signature-check",
+                                style="color: #059669; font-weight: 600; display: none;",
+                            ),
+                            class_="mt-3 d-flex align-items-center",
+                        ),
+                        ui.tags.div(
+                            "✍️ Sign here with your finger or mouse",
+                            class_="text-muted small mt-2 text-center",
+                        ),
+                        class_="signature-section",
+                    ),
+                    ui.tags.div(
+                        ui.input_text(
+                            "signature_data",
+                            None,
+                            value="",
+                        ),
+                        style="display: none;",
+                    ),
+                    class_="col-md-6 mb-4",
+                ),
+                class_="row",
             ),
-            class_="row",
-        ),
-        ui.tags.div(
-            ui.output_text("current_date_display"),
-            class_="mb-4 p-3 bg-light rounded",
-        ),
-        ui.tags.div(
-            ui.input_action_button(
-                "submit_waiver",
-                content["submit_button"],
-                class_="btn btn-primary btn-lg",
-                disabled=True,
+            ui.tags.div(
+                ui.input_action_button(
+                    "submit_waiver",
+                    f"🚀 {content['submit_button']}",
+                    class_="btn btn-primary btn-lg w-100",
+                ),
+                class_="d-grid gap-2",
             ),
-            class_="text-end",
+            class_="form-section",
         ),
     )
 
@@ -220,58 +222,266 @@ def create_form_section(content):
 app_ui = ui.page_fluid(
     ui.tags.style(
         """
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
         body { 
-            background-color: #f8f9fa; 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            line-height: 1.6;
         }
+        
         .waiver-container { 
-            max-width: 800px; 
+            max-width: 900px; 
             margin: 2rem auto; 
             background: white; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border-radius: 20px; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 8px 25px rgba(0,0,0,0.08);
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.8);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header-section {
+            background: linear-gradient(135deg, #166534 0%, #15803d 100%);
+            position: relative;
             overflow: hidden;
         }
-        .form-control:focus, .form-check-input:focus {
-            border-color: #0d6efd;
-            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        
+        .form-content {
+            padding: 3rem 2.5rem 2.5rem;
         }
+        
+        .form-control {
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 0.875rem 1rem;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            background: #fafafa;
+        }
+        
+        .form-control:focus {
+            border-color: #059669;
+            box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+            background: white;
+            transform: translateY(-1px);
+        }
+        
+        .form-check-input {
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 2px solid #d1d5db;
+            border-radius: 6px;
+            background: #fafafa;
+            transition: all 0.3s ease;
+        }
+        
+        .form-check-input:focus {
+            border-color: #059669;
+            box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+        }
+        
+        .form-check-input:checked {
+            background-color: #059669 !important;
+            border-color: #059669 !important;
+        }
+        
+        .form-label {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+        
+        .signature-section {
+            background: #f8fafc;
+            border: 2px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .signature-section:hover {
+            border-color: #059669;
+            background: #f0fdf4;
+        }
+        
+        #signature-canvas {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            cursor: crosshair;
+            touch-action: none;
+            width: 100%;
+            max-width: 450px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+        }
+        
+        #signature-canvas:hover {
+            border-color: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        }
+        
+        .btn {
+            border-radius: 12px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+            box-shadow: 0 4px 15px rgba(5, 150, 105, 0.4);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(5, 150, 105, 0.5);
+            background: linear-gradient(135deg, #047857 0%, #059669 100%);
+        }
+        
+        .btn-outline-secondary {
+            border: 2px solid #e5e7eb;
+            color: #6b7280;
+            background: white;
+        }
+        
+        .btn-outline-secondary:hover {
+            background: #f9fafb;
+            border-color: #d1d5db;
+            transform: translateY(-1px);
+        }
+        
+        .btn-outline-light {
+            border: 2px solid rgba(255,255,255,0.3);
+            color: white;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .btn-outline-light:hover {
+            background: rgba(255,255,255,0.2);
+            border-color: rgba(255,255,255,0.5);
+            transform: translateY(-1px);
+        }
+        
         .success-message {
-            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-            border: 1px solid #c3e6cb;
-            border-radius: 8px;
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            border: 2px solid #a7f3d0;
+            border-radius: 20px;
             padding: 3rem;
             text-align: center;
             margin: 2rem 0;
+            box-shadow: 0 10px 30px rgba(5, 150, 105, 0.1);
         }
+        
         .checkmark {
-            width: 64px;
-            height: 64px;
+            width: 80px;
+            height: 80px;
             border-radius: 50%;
-            background: #28a745;
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
             color: white;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 2rem;
-            margin-bottom: 1rem;
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 8px 25px rgba(5, 150, 105, 0.3);
         }
-        #signature-canvas {
-            touch-action: none;
+        
+        .waiver-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 2rem;
+            text-align: center;
+            line-height: 1.3;
         }
+        
+        .waiver-content {
+            font-size: 0.95rem;
+            line-height: 1.7;
+            color: #4b5563;
+        }
+        
+        .waiver-content ol, .waiver-content ul {
+            padding-left: 1.5rem;
+        }
+        
+        .waiver-content li {
+            margin-bottom: 0.75rem;
+        }
+        
+        .logo-container {
+            background: rgba(255,255,255,0.95);
+            padding: 1rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+        
+        .divider {
+            height: 2px;
+            background: linear-gradient(90deg, transparent 0%, #e5e7eb 50%, transparent 100%);
+            margin: 2.5rem 0;
+            border: none;
+        }
+        
+        .form-section {
+            background: #fafafa;
+            border-radius: 16px;
+            padding: 2rem;
+            margin: 2rem 0;
+            border: 1px solid #e5e7eb;
+        }
+        
         .waiver-container * {
             -webkit-print-color-adjust: exact !important;
             color-adjust: exact !important;
         }
-        input[type="checkbox"]:checked {
-            background-color: #0d6efd !important;
+        
+        @media (max-width: 768px) {
+            .waiver-container {
+                margin: 1rem;
+                border-radius: 16px;
+            }
+            .form-content {
+                padding: 2rem 1.5rem;
+            }
+            .waiver-title {
+                font-size: 1.5rem;
+            }
         }
-        input[type="text"], input[type="email"] {
-            border: 1px solid #ced4da !important;
-            background-color: white !important;
+        
+        #submitting-overlay { 
+            position: fixed; 
+            inset: 0; 
+            display: none; 
+            align-items: center; 
+            justify-content: center; 
+            z-index: 2000; 
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
         }
-    #submitting-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(0,0,0,0.45); }
-    #submitting-overlay .inner { color: #fff; font-weight: 500; font-size: 1.1rem; display:flex; align-items:center; gap:.75rem; }
+        
+        #submitting-overlay .inner { 
+            color: #fff; 
+            font-weight: 600; 
+            font-size: 1.1rem; 
+            display: flex; 
+            align-items: center; 
+            gap: 1rem;
+            background: rgba(0,0,0,0.8);
+            padding: 2rem 3rem;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
     """
     ),
     ui.tags.script(
@@ -828,7 +1038,10 @@ app_ui = ui.page_fluid(
     ),
     tags.div(
         ui.output_ui("header_section"),
-        ui.output_ui("main_content"),
+        ui.tags.div(
+            ui.output_ui("main_content"),
+            class_="form-content",
+        ),
         ui.tags.footer(
             "Hope's Corner, Inc. Bicycle Program Waiver",
             class_="text-center text-muted small mt-4 py-3",
@@ -1074,26 +1287,26 @@ def server(input, output, session):
             return False
 
     def create_waiver_screenshot(waiver_data, content):
-        """Create a server-side screenshot/image of the waiver data"""
+        """Create a high-quality server-side screenshot/image of the waiver data"""
         try:
-            width = 850
-            height = 1600
+            width = 1200
+            height = 1800
 
-            img = Image.new("RGB", (width, height), "white")
+            img = Image.new("RGB", (width, height), "#ffffff")
             draw = ImageDraw.Draw(img)
 
             try:
                 title_font = ImageFont.truetype(
-                    "/System/Library/Fonts/Helvetica.ttc", 20
+                    "/System/Library/Fonts/Helvetica.ttc", 28
                 )
                 header_font = ImageFont.truetype(
-                    "/System/Library/Fonts/Helvetica.ttc", 16
+                    "/System/Library/Fonts/Helvetica.ttc", 22
                 )
                 normal_font = ImageFont.truetype(
-                    "/System/Library/Fonts/Helvetica.ttc", 12
+                    "/System/Library/Fonts/Helvetica.ttc", 16
                 )
                 small_font = ImageFont.truetype(
-                    "/System/Library/Fonts/Helvetica.ttc", 10
+                    "/System/Library/Fonts/Helvetica.ttc", 14
                 )
             except:
                 try:
@@ -1104,20 +1317,42 @@ def server(input, output, session):
                 except:
                     title_font = header_font = normal_font = small_font = None
 
-            y = 30
-            margin = 40
+            margin = 60
+            y = 50
+
+            header_height = 120
+            draw.rectangle([(0, 0), (width, header_height)], fill="#059669")
+            
+            logo_text = "HOPE'S CORNER"
+            subtitle_text = "SHARING MEALS, BUILDING COMMUNITY"
+            if title_font:
+                logo_bbox = draw.textbbox((0, 0), logo_text, font=title_font)
+                logo_width = logo_bbox[2] - logo_bbox[0]
+                logo_x = (width - logo_width) // 2
+                draw.text((logo_x, 25), logo_text, fill="white", font=title_font)
+                
+                if normal_font:
+                    subtitle_bbox = draw.textbbox((0, 0), subtitle_text, font=normal_font)
+                    subtitle_width = subtitle_bbox[2] - subtitle_bbox[0]
+                    subtitle_x = (width - subtitle_width) // 2
+                    draw.text((subtitle_x, 65), subtitle_text, fill="white", font=normal_font)
+
+            y = header_height + 40
 
             title_text = content["title"]
             if title_font:
-                title_lines = textwrap.wrap(title_text, width=50)
+                title_lines = textwrap.wrap(title_text, width=55)
                 for line in title_lines:
-                    draw.text((margin, y), line, fill="black", font=title_font)
-                    y += 25
+                    line_bbox = draw.textbbox((0, 0), line, font=title_font)
+                    line_width = line_bbox[2] - line_bbox[0]
+                    line_x = (width - line_width) // 2
+                    draw.text((line_x, y), line, fill="#1f2937", font=title_font)
+                    y += 35
             else:
-                draw.text((margin, y), title_text[:80], fill="black")
-                y += 25
+                draw.text((margin, y), title_text[:80], fill="#1f2937")
+                y += 35
 
-            y += 20
+            y += 30
 
             draw.text(
                 (margin, y),
