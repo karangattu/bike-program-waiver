@@ -12,14 +12,6 @@ A digital waiver and release of liability application for the Hope's Corner Bicy
 - **Form Validation**: Ensures all required fields are completed before submission
 - **Accessibility**: Proper labeling and keyboard navigation support
 
-## Technologies Used
-
-- **React 19**: Modern React with hooks and functional components
-- **Vite**: Fast build tool and development server
-- **Tailwind CSS**: Utility-first CSS framework for styling
-- **html2canvas**: Library for capturing screenshots
-- **ESLint**: Code linting and formatting
-
 ## Installation
 
 1. Clone the repository:
@@ -50,14 +42,6 @@ A digital waiver and release of liability application for the Hope's Corner Bicy
 3. Check the agreement checkbox
 4. Click "Submit Waiver" to complete the process
 5. A screenshot of the completed form will be automatically downloaded
-
-## Build for Production
-
-```bash
-npm run build
-```
-
-The built files will be in the `dist` directory, ready for deployment.
 
 ## Contributing
 
