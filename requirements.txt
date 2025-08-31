@@ -2,3 +2,4 @@ shiny
 htmltools
 Pillow
 requests
+openpyxl
