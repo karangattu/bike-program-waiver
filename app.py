@@ -172,7 +172,7 @@ def create_form_section(content):
                             id="signature-canvas",
                             width="450",
                             height="180",
-                            style="width: 100%; max-width: 450px;",
+                            style="width: 100%; max-width: 450px; height: auto;",
                         ),
                         ui.tags.div(
                             ui.tags.button(
@@ -189,7 +189,7 @@ def create_form_section(content):
                             class_="mt-3 d-flex align-items-center",
                         ),
                         ui.tags.div(
-                            "✍️ Sign here with your finger or mouse",
+                            "✍️ Sign here with your finger or mouse • Use landscape mode on mobile for best experience",
                             class_="text-muted small mt-2 text-center",
                         ),
                         class_="signature-section",
@@ -314,6 +314,7 @@ app_ui = ui.page_fluid(
             touch-action: none;
             width: 100%;
             max-width: 450px;
+            min-height: 180px;
             background: white;
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
             transition: all 0.3s ease;
@@ -323,6 +324,26 @@ app_ui = ui.page_fluid(
             border-color: #059669;
             transform: translateY(-2px);
             box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        }
+        
+        @media (max-width: 768px) {
+            #signature-canvas {
+                min-height: 200px;
+                max-width: 100%;
+                border-width: 3px;
+                border-radius: 16px;
+            }
+            
+            .signature-section {
+                padding: 1rem;
+                border-width: 3px;
+            }
+            
+            .signature-section .btn {
+                padding: 0.875rem 1.5rem;
+                font-size: 1rem;
+                font-weight: 600;
+            }
         }
         
         .btn {
@@ -502,23 +523,39 @@ app_ui = ui.page_fluid(
                 
                 ctx = canvas.getContext('2d');
                 ctx.strokeStyle = '#000';
-                ctx.lineWidth = 2;
+                ctx.lineWidth = window.innerWidth <= 768 ? 3 : 2;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
                 
-                const rect = canvas.getBoundingClientRect();
-                canvas.width = rect.width * window.devicePixelRatio;
-                canvas.height = 150 * window.devicePixelRatio;
-                ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+                function resizeCanvas() {
+                    const rect = canvas.getBoundingClientRect();
+                    const dpr = window.devicePixelRatio || 1;
+                    const isMobile = window.innerWidth <= 768;
+                    
+                    canvas.width = rect.width * dpr;
+                    canvas.height = (isMobile ? 200 : 180) * dpr;
+                    
+                    canvas.style.width = rect.width + 'px';
+                    canvas.style.height = (isMobile ? 200 : 180) + 'px';
+                    
+                    ctx.scale(dpr, dpr);
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = isMobile ? 3 : 2;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                }
+                
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
                 
                 canvas.addEventListener('mousedown', startDrawing);
                 canvas.addEventListener('mousemove', draw);
                 canvas.addEventListener('mouseup', stopDrawing);
                 canvas.addEventListener('mouseout', stopDrawing);
                 
-                canvas.addEventListener('touchstart', handleTouch);
-                canvas.addEventListener('touchmove', handleTouch);
-                canvas.addEventListener('touchend', stopDrawing);
+                canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+                canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+                canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
                 
                 const clearBtn = document.getElementById('clear-signature');
                 if (clearBtn) {
@@ -541,6 +578,9 @@ app_ui = ui.page_fluid(
                 const pos = getPos(e);
                 lastX = pos.x;
                 lastY = pos.y;
+                
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
             }
             
             function draw(e) {
@@ -560,18 +600,35 @@ app_ui = ui.page_fluid(
             }
             
             function stopDrawing() {
-                isDrawing = false;
-                updateSignatureData();
+                if (isDrawing) {
+                    isDrawing = false;
+                    updateSignatureData();
+                }
             }
             
-            function handleTouch(e) {
+            function handleTouchStart(e) {
                 e.preventDefault();
                 const touch = e.touches[0];
-                const mouseEvent = new MouseEvent(e.type === 'touchstart' ? 'mousedown' : 
-                                                  e.type === 'touchmove' ? 'mousemove' : 'mouseup', {
+                const mouseEvent = new MouseEvent('mousedown', {
                     clientX: touch.clientX,
                     clientY: touch.clientY
                 });
+                canvas.dispatchEvent(mouseEvent);
+            }
+            
+            function handleTouchMove(e) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const mouseEvent = new MouseEvent('mousemove', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+                canvas.dispatchEvent(mouseEvent);
+            }
+            
+            function handleTouchEnd(e) {
+                e.preventDefault();
+                const mouseEvent = new MouseEvent('mouseup', {});
                 canvas.dispatchEvent(mouseEvent);
             }
             
