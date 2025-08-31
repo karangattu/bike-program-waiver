@@ -1,14 +1,15 @@
-from shiny import App, ui, render, reactive
-import htmltools as tags
-from datetime import datetime
-import os
-import requests
-from urllib.parse import urlparse
 import base64
-from openpyxl import Workbook
 import io
-from PIL import Image, ImageDraw, ImageFont
+import os
 import textwrap
+from datetime import datetime
+from urllib.parse import urlparse
+
+import htmltools as tags
+import requests
+from openpyxl import Workbook
+from PIL import Image, ImageDraw, ImageFont
+from shiny import App, reactive, render, ui
 
 try:
     from dotenv import load_dotenv
