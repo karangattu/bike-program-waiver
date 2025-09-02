@@ -1266,6 +1266,12 @@ app_ui = ui.page_fluid(
             const ov = document.getElementById('submitting-overlay');
             if (ov) ov.style.display = 'none';
         });
+        
+        Shiny.addCustomMessageHandler('clear_signature_canvas', () => {
+            if (window.SignatureCanvas) {
+                window.SignatureCanvas.clearCanvas();
+            }
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
             loadHtml2Canvas();
@@ -1927,17 +1933,26 @@ def server(input, output, session):
     def main_content():
         if is_submitted.get():
             content = waiver_content[language.get()]
+            submit_another_text = "Submit Another Waiver" if language.get() == "en" else "Enviar Otra Renuncia" if language.get() == "es" else "提交另一份弃权书"
+            
             return ui.tags.div(
                 ui.tags.div(
                     ui.tags.div("✓", class_="checkmark"),
                     ui.tags.h3(
                         content["success_message"], class_="h4 fw-bold text-success"
                     ),
+                    ui.tags.div(
+                        ui.input_action_button(
+                            "submit_another",
+                            submit_another_text,
+                            class_="btn btn-primary btn-lg mt-3",
+                        ),
+                        class_="d-grid gap-2 mt-4",
+                    ),
                     class_="success-message",
                 ),
                 ui.tags.script(
                     """
-                    // Hide overlay when success page is shown
                     setTimeout(function() {
                         const overlay = document.getElementById('submitting-overlay');
                         if (overlay) overlay.style.display = 'none';
@@ -1988,6 +2003,19 @@ def server(input, output, session):
             formatted_date = f"{today.year}年{today.month}月{today.day}日"
 
         return f"{content['date_label']}: {formatted_date}"
+
+    @reactive.Effect
+    @reactive.event(input.submit_another)
+    def reset_for_new_waiver():
+        is_submitted.set(False)
+        status_message.set("")
+        status_type.set("info")
+        ui.update_text("participant_name", value="")
+        ui.update_checkbox("agreement", value=False)
+        ui.update_text("signature_data", value="")
+        ui.update_action_button("submit_waiver", disabled=True)
+        
+        session.send_custom_message("clear_signature_canvas", {})
 
     @reactive.Effect
     @reactive.event(input.language_switch)
