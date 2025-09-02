@@ -18,6 +18,36 @@ try:
 except Exception:
     pass
 
+def ensure_fonts_available():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    fonts_dir = os.path.join(script_dir, "fonts")
+    
+    os.makedirs(fonts_dir, exist_ok=True)
+    
+    font_urls = {
+        "NotoSansCJKsc-Regular.otf": "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
+        "NotoSansCJKsc-Bold.otf": "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Bold.otf",
+        "OpenSans-Regular.ttf": "https://github.com/google/fonts/raw/main/apache/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf"
+    }
+    
+    for font_name, font_url in font_urls.items():
+        font_path = os.path.join(fonts_dir, font_name)
+        if not os.path.exists(font_path):
+            try:
+                print(f"[fonts] Downloading {font_name}...")
+                response = requests.get(font_url, timeout=30)
+                response.raise_for_status()
+                with open(font_path, 'wb') as f:
+                    f.write(response.content)
+                print(f"[fonts] Downloaded {font_name} successfully")
+            except Exception as e:
+                print(f"[fonts] Failed to download {font_name}: {e}")
+
+try:
+    ensure_fonts_available()
+except Exception as e:
+    print(f"[fonts] Font initialization error: {e}")
+
 waiver_content = {
     "en": {
         "title": "BICYCLE PROGRAM WAIVER AND RELEASE FROM LIABILITY",
@@ -1501,27 +1531,54 @@ def server(input, output, session):
             img = Image.new("RGB", (width, height), "#ffffff")
             draw = ImageDraw.Draw(img)
 
-            try:
-                title_font = ImageFont.truetype(
-                    "/System/Library/Fonts/Helvetica.ttc", 28
-                )
-                header_font = ImageFont.truetype(
-                    "/System/Library/Fonts/Helvetica.ttc", 22
-                )
-                normal_font = ImageFont.truetype(
-                    "/System/Library/Fonts/Helvetica.ttc", 16
-                )
-                small_font = ImageFont.truetype(
-                    "/System/Library/Fonts/Helvetica.ttc", 14
-                )
-            except:
+            def get_font_for_language(language, size):
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                fonts_dir = os.path.join(script_dir, "fonts")
+                
+                if language == "zh":
+                    bundled_chinese_fonts = [
+                        os.path.join(fonts_dir, "NotoSansCJKsc-Regular.otf"),
+                        os.path.join(fonts_dir, "NotoSansCJKsc-Bold.otf")
+                    ]
+                    for font_path in bundled_chinese_fonts:
+                        try:
+                            if os.path.exists(font_path):
+                                return ImageFont.truetype(font_path, size)
+                        except:
+                            continue
+                
+                bundled_western_fonts = [
+                    os.path.join(fonts_dir, "OpenSans-Regular.ttf")
+                ]
+                for font_path in bundled_western_fonts:
+                    try:
+                        if os.path.exists(font_path):
+                            return ImageFont.truetype(font_path, size)
+                    except:
+                        continue
+                
+                system_fonts = [
+                    "/System/Library/Fonts/Helvetica.ttc",
+                    "/System/Library/Fonts/Arial.ttf", 
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                    "/Windows/Fonts/arial.ttf"
+                ]
+                for font_path in system_fonts:
+                    try:
+                        return ImageFont.truetype(font_path, size)
+                    except:
+                        continue
+                
                 try:
-                    title_font = ImageFont.load_default()
-                    header_font = ImageFont.load_default()
-                    normal_font = ImageFont.load_default()
-                    small_font = ImageFont.load_default()
+                    return ImageFont.load_default()
                 except:
-                    title_font = header_font = normal_font = small_font = None
+                    return None
+
+            current_language = waiver_data.get('language', 'en')
+            title_font = get_font_for_language(current_language, 28)
+            header_font = get_font_for_language(current_language, 22)
+            normal_font = get_font_for_language(current_language, 16)
+            small_font = get_font_for_language(current_language, 14)
 
             margin = 60
             y = 50
@@ -1545,76 +1602,100 @@ def server(input, output, session):
 
             y = header_height + 40
 
+            def safe_draw_text(draw, pos, text, font, fill="#000000", max_width=None):
+                try:
+                    if font and text:
+                        if max_width and current_language == "zh":
+                            lines = []
+                            current_line = ""
+                            for char in text:
+                                test_line = current_line + char
+                                try:
+                                    bbox = draw.textbbox((0, 0), test_line, font=font)
+                                    line_width = bbox[2] - bbox[0]
+                                    if line_width > max_width and current_line:
+                                        lines.append(current_line)
+                                        current_line = char
+                                    else:
+                                        current_line = test_line
+                                except:
+                                    current_line = test_line
+                            if current_line:
+                                lines.append(current_line)
+                            
+                            x, y = pos
+                            for line in lines[:6]:
+                                try:
+                                    draw.text((x, y), line, fill=fill, font=font)
+                                    y += font.size + 5 if hasattr(font, 'size') else 25
+                                except:
+                                    draw.text((x, y), line.encode('utf-8', 'ignore').decode('utf-8'), fill=fill, font=font)
+                                    y += font.size + 5 if hasattr(font, 'size') else 25
+                            return y
+                        else:
+                            draw.text(pos, text, fill=fill, font=font)
+                            return pos[1] + (font.size + 5 if hasattr(font, 'size') else 25)
+                    else:
+                        draw.text(pos, text[:100], fill=fill)
+                        return pos[1] + 25
+                except Exception as e:
+                    try:
+                        safe_text = text.encode('utf-8', 'ignore').decode('utf-8')
+                        draw.text(pos, safe_text[:100], fill=fill)
+                    except:
+                        draw.text(pos, "[Text rendering error]", fill=fill)
+                    return pos[1] + 25
+
             title_text = content["title"]
-            if title_font:
+            if current_language == "zh":
+                y = safe_draw_text(draw, (margin, y), title_text, title_font, "#1f2937", width - 2*margin)
+            else:
                 title_lines = textwrap.wrap(title_text, width=55)
                 for line in title_lines:
-                    line_bbox = draw.textbbox((0, 0), line, font=title_font)
-                    line_width = line_bbox[2] - line_bbox[0]
-                    line_x = (width - line_width) // 2
-                    draw.text((line_x, y), line, fill="#1f2937", font=title_font)
+                    if title_font:
+                        try:
+                            line_bbox = draw.textbbox((0, 0), line, font=title_font)
+                            line_width = line_bbox[2] - line_bbox[0]
+                            line_x = (width - line_width) // 2
+                            draw.text((line_x, y), line, fill="#1f2937", font=title_font)
+                        except:
+                            draw.text((margin, y), line, fill="#1f2937")
+                    else:
+                        draw.text((margin, y), line, fill="#1f2937")
                     y += 35
-            else:
-                draw.text((margin, y), title_text[:80], fill="#1f2937")
-                y += 35
 
             y += 30
 
-            draw.text(
-                (margin, y),
-                content["logo_text1"],
-                fill="black",
-                font=header_font or title_font,
-            )
-            y += 20
-            draw.text(
-                (margin, y),
-                content["logo_subtext"],
-                fill="black",
-                font=normal_font or title_font,
-            )
-            y += 30
+            y = safe_draw_text(draw, (margin, y), content["logo_text1"], header_font or title_font, "black")
+            y = safe_draw_text(draw, (margin, y), content["logo_subtext"], normal_font or title_font, "black")
+            y += 10
 
-            draw.text(
-                (margin, y),
-                "FORM SUBMISSION DETAILS:",
-                fill="black",
-                font=header_font or title_font,
-            )
-            y += 25
+            details_text = "FORM SUBMISSION DETAILS:" if current_language == "en" else "表单提交详情:" if current_language == "zh" else "DETALLES DE ENVÍO:"
+            y = safe_draw_text(draw, (margin, y), details_text, header_font or title_font, "black")
+            y += 5
 
-            name_text = f"Participant Name: {waiver_data.get('name', 'N/A')}"
-            draw.text(
-                (margin, y), name_text, fill="black", font=normal_font or title_font
-            )
-            y += 20
+            name_label = "Participant Name:" if current_language == "en" else "参与者姓名:" if current_language == "zh" else "Nombre del Participante:"
+            name_text = f"{name_label} {waiver_data.get('name', 'N/A')}"
+            y = safe_draw_text(draw, (margin, y), name_text, normal_font or title_font, "black")
 
-            agreement_text = f"Agreement Status: {'✓ AGREED' if waiver_data.get('agreement', False) else '☐ NOT AGREED'}"
-            draw.text(
-                (margin, y),
-                agreement_text,
-                fill="black",
-                font=normal_font or title_font,
-            )
-            y += 20
+            agreement_label = "Agreement Status:" if current_language == "en" else "协议状态:" if current_language == "zh" else "Estado del Acuerdo:"
+            agreement_status = "✓ AGREED" if current_language == "en" else "✓ 已同意" if current_language == "zh" else "✓ ACEPTADO"
+            not_agreed = "☐ NOT AGREED" if current_language == "en" else "☐ 未同意" if current_language == "zh" else "☐ NO ACEPTADO"
+            agreement_text = f"{agreement_label} {agreement_status if waiver_data.get('agreement', False) else not_agreed}"
+            y = safe_draw_text(draw, (margin, y), agreement_text, normal_font or title_font, "black")
 
-            date_text = f"Date: {waiver_data.get('timestamp', 'N/A')}"
-            draw.text(
-                (margin, y), date_text, fill="black", font=normal_font or title_font
-            )
-            y += 20
+            date_label = "Date:" if current_language == "en" else "日期:" if current_language == "zh" else "Fecha:"
+            date_text = f"{date_label} {waiver_data.get('timestamp', 'N/A')}"
+            y = safe_draw_text(draw, (margin, y), date_text, normal_font or title_font, "black")
 
             lang_mapping = {'en': 'English', 'es': 'Spanish', 'zh': 'Chinese'}
-            lang_text = f"Language: {lang_mapping.get(waiver_data.get('language'), 'Unknown')}"
-            draw.text(
-                (margin, y), lang_text, fill="black", font=normal_font or title_font
-            )
-            y += 30
+            lang_label = "Language:" if current_language == "en" else "语言:" if current_language == "zh" else "Idioma:"
+            lang_text = f"{lang_label} {lang_mapping.get(waiver_data.get('language'), 'Unknown')}"
+            y = safe_draw_text(draw, (margin, y), lang_text, normal_font or title_font, "black")
+            y += 10
 
-            draw.text(
-                (margin, y), "SIGNATURE:", fill="black", font=header_font or title_font
-            )
-            y += 25
+            signature_label = "SIGNATURE:" if current_language == "en" else "签名:" if current_language == "zh" else "FIRMA:"
+            y = safe_draw_text(draw, (margin, y), signature_label, header_font or title_font, "black")
 
             signature_data = waiver_data.get("signature", "")
             if signature_data and signature_data.startswith("data:image"):
@@ -1649,97 +1730,77 @@ def server(input, output, session):
                 except Exception as e:
                     print(f"[screenshot] Could not process signature: {e}")
                     import traceback
-
                     traceback.print_exc()
-                    draw.text(
-                        (margin, y),
-                        "[Signature Present - Could not display]",
-                        fill="black",
-                        font=normal_font or title_font,
-                    )
-                    y += 20
+                    no_display_text = "[Signature Present - Could not display]" if current_language == "en" else "[签名存在 - 无法显示]" if current_language == "zh" else "[Firma presente - No se puede mostrar]"
+                    y = safe_draw_text(draw, (margin, y), no_display_text, normal_font or title_font, "black")
             else:
-                draw.text(
-                    (margin, y),
-                    "[No signature provided]",
-                    fill="black",
-                    font=normal_font or title_font,
-                )
-                y += 20
+                no_signature_text = "[No signature provided]" if current_language == "en" else "[未提供签名]" if current_language == "zh" else "[No se proporcionó firma]"
+                y = safe_draw_text(draw, (margin, y), no_signature_text, normal_font or title_font, "black")
 
             y += 20
 
-            draw.text(
-                (margin, y),
-                "WAIVER CONTENT:",
-                fill="black",
-                font=header_font or title_font,
-            )
-            y += 25
+            waiver_content_label = "WAIVER CONTENT:" if current_language == "en" else "弃权书内容:" if current_language == "zh" else "CONTENIDO DE RENUNCIA:"
+            y = safe_draw_text(draw, (margin, y), waiver_content_label, header_font or title_font, "black")
+            y += 5
 
-            intro_lines = textwrap.wrap(content["intro"], width=90)
-            for line in intro_lines[:12]:
-                draw.text(
-                    (margin, y), line, fill="black", font=small_font or normal_font
-                )
-                y += 12
-                if y > height - 150:
-                    break
-
-            y += 15
-
-            if y < height - 300:
-                for i, point in enumerate(content["points"][:4], 1):
-                    point_lines = textwrap.wrap(f"{i}. {point}", width=85)
-                    for line in point_lines[:4]:
-                        draw.text(
-                            (margin, y),
-                            line,
-                            fill="black",
-                            font=small_font or normal_font,
-                        )
-                        y += 12
-                        if y > height - 200:
-                            break
-                    y += 8
+            if current_language == "zh":
+                y = safe_draw_text(draw, (margin, y), content["intro"], small_font or normal_font, "black", width - 2*margin - 20)
+                y += 10
+                
+                for i, point in enumerate(content["points"][:3], 1):
+                    point_text = f"{i}. {point}"
+                    y = safe_draw_text(draw, (margin, y), point_text, small_font or normal_font, "black", width - 2*margin - 20)
                     if y > height - 200:
                         break
-
-            if y < height - 250:
-                sub_points = content.get("sub_points", [])
-                for i, sub_point in enumerate(sub_points[:3], 1):
-                    sub_lines = textwrap.wrap(f"  • {sub_point}", width=80)
-                    for line in sub_lines[:3]:
-                        draw.text(
-                            (margin + 20, y),
-                            line,
-                            fill="black",
-                            font=small_font or normal_font,
-                        )
-                        y += 12
-                        if y > height - 150:
+                
+                if y < height - 150:
+                    sub_points = content.get("sub_points", [])
+                    for i, sub_point in enumerate(sub_points[:2], 1):
+                        sub_text = f"  • {sub_point}"
+                        y = safe_draw_text(draw, (margin + 20, y), sub_text, small_font or normal_font, "black", width - 2*margin - 40)
+                        if y > height - 100:
                             break
-                    y += 5
+            else:
+                intro_lines = textwrap.wrap(content["intro"], width=90)
+                for line in intro_lines[:12]:
+                    y = safe_draw_text(draw, (margin, y), line, small_font or normal_font, "black")
                     if y > height - 150:
                         break
 
+                if y < height - 300:
+                    for i, point in enumerate(content["points"][:4], 1):
+                        point_lines = textwrap.wrap(f"{i}. {point}", width=85)
+                        for line in point_lines[:4]:
+                            y = safe_draw_text(draw, (margin, y), line, small_font or normal_font, "black")
+                            if y > height - 200:
+                                break
+                        if y > height - 200:
+                            break
+
+                if y < height - 250:
+                    sub_points = content.get("sub_points", [])
+                    for i, sub_point in enumerate(sub_points[:3], 1):
+                        sub_lines = textwrap.wrap(f"  • {sub_point}", width=80)
+                        for line in sub_lines[:3]:
+                            y = safe_draw_text(draw, (margin + 20, y), line, small_font or normal_font, "black")
+                            if y > height - 150:
+                                break
+                        if y > height - 150:
+                            break
+
             if y < height - 120:
                 y += 15
-                draw.text(
-                    (margin, y),
-                    "IMPORTANT:",
-                    fill="black",
-                    font=header_font or title_font,
-                )
-                y += 20
-                final_lines = textwrap.wrap(content["final_agreement"], width=85)
-                for line in final_lines[:8]:
-                    draw.text(
-                        (margin, y), line, fill="black", font=small_font or normal_font
-                    )
-                    y += 12
-                    if y > height - 80:
-                        break
+                important_label = "IMPORTANT:" if current_language == "en" else "重要:" if current_language == "zh" else "IMPORTANTE:"
+                y = safe_draw_text(draw, (margin, y), important_label, header_font or title_font, "black")
+                
+                if current_language == "zh":
+                    y = safe_draw_text(draw, (margin, y), content["final_agreement"], small_font or normal_font, "black", width - 2*margin - 20)
+                else:
+                    final_lines = textwrap.wrap(content["final_agreement"], width=85)
+                    for line in final_lines[:8]:
+                        y = safe_draw_text(draw, (margin, y), line, small_font or normal_font, "black")
+                        if y > height - 80:
+                            break
 
             buffer = io.BytesIO()
             img.save(buffer, format="PNG")
