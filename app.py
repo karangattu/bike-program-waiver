@@ -185,10 +185,37 @@ def create_form_section(content):
             ),
             ui.tags.div(
                 ui.tags.div(
-                    ui.input_text(
-                        "participant_name",
-                        content["print_name_label"],
-                        placeholder="Enter your full name",
+                    ui.tags.div(
+                        ui.input_text(
+                            "participant_name",
+                            content["print_name_label"],
+                            placeholder="Enter your full name",
+                        ),
+                        ui.tags.script(
+                            """
+                            document.addEventListener('DOMContentLoaded', function() {
+                                function setupNameCapitalization() {
+                                    const nameInput = document.querySelector('input[id*="participant_name"]');
+                                    if (nameInput) {
+                                        nameInput.addEventListener('blur', function() {
+                                            const words = this.value.split(' ');
+                                            const capitalizedWords = words.map(word => {
+                                                if (word.length > 0) {
+                                                    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                                                }
+                                                return word;
+                                            });
+                                            this.value = capitalizedWords.join(' ');
+                                            this.dispatchEvent(new Event('input', { bubbles: true }));
+                                        });
+                                    } else {
+                                        setTimeout(setupNameCapitalization, 100);
+                                    }
+                                }
+                                setupNameCapitalization();
+                            });
+                            """
+                        ),
                     ),
                     class_="col-md-6 mb-4",
                 ),
@@ -341,12 +368,18 @@ app_ui = ui.page_fluid(
             border-radius: 12px;
             cursor: crosshair;
             touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
             width: 100%;
             max-width: 450px;
             min-height: 180px;
             background: white;
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
             transition: all 0.3s ease;
+            position: relative;
+            display: block;
         }
         
         #signature-canvas:hover {
@@ -355,23 +388,39 @@ app_ui = ui.page_fluid(
             box-shadow: 0 8px 24px rgba(0,0,0,0.12);
         }
         
+        #signature-canvas:active,
+        #signature-canvas:focus {
+            border-color: #059669;
+            outline: none;
+        }
+        
         @media (max-width: 768px) {
             #signature-canvas {
                 min-height: 200px;
                 max-width: 100%;
                 border-width: 3px;
                 border-radius: 16px;
+                touch-action: manipulation;
             }
             
             .signature-section {
                 padding: 1rem;
                 border-width: 3px;
+                touch-action: manipulation;
             }
             
             .signature-section .btn {
                 padding: 0.875rem 1.5rem;
                 font-size: 1rem;
                 font-weight: 600;
+                touch-action: manipulation;
+            }
+        }
+        
+        @media (pointer: coarse) {
+            #signature-canvas {
+                min-height: 220px;
+                border-width: 3px;
             }
         }
         
@@ -536,165 +585,236 @@ app_ui = ui.page_fluid(
     ),
     ui.tags.script(
         """
-        document.addEventListener('DOMContentLoaded', function() {
-            let canvas = null;
-            let ctx = null;
-            let isDrawing = false;
-            let lastX = 0;
-            let lastY = 0;
+        window.SignatureCanvas = window.SignatureCanvas || {
+            canvas: null,
+            ctx: null,
+            isDrawing: false,
+            lastX: 0,
+            lastY: 0,
+            isCanvasReady: false,
             
-            function initCanvas() {
-                canvas = document.getElementById('signature-canvas');
-                if (!canvas) {
-                    setTimeout(initCanvas, 100);
+            init: function() {
+                this.canvas = document.getElementById('signature-canvas');
+                if (!this.canvas) {
+                    setTimeout(() => this.init(), 100);
                     return;
                 }
                 
-                ctx = canvas.getContext('2d');
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = window.innerWidth <= 768 ? 3 : 2;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
+                this.setupCanvasContext();
+                this.setupEventListeners();
+                this.isCanvasReady = true;
+            },
+            
+            reinit: function() {
+                this.isCanvasReady = false;
+                this.canvas = null;
+                this.ctx = null;
+                this.isDrawing = false;
+                setTimeout(() => this.init(), 200);
+            },
+            
+            setupCanvasContext: function() {
+                this.ctx = this.canvas.getContext('2d');
                 
-                function resizeCanvas() {
-                    const rect = canvas.getBoundingClientRect();
+                const resizeCanvas = () => {
+                    const rect = this.canvas.getBoundingClientRect();
                     const dpr = window.devicePixelRatio || 1;
                     const isMobile = window.innerWidth <= 768;
                     
-                    canvas.width = rect.width * dpr;
-                    canvas.height = (isMobile ? 200 : 180) * dpr;
+                    const currentData = this.isCanvasReady ? this.canvas.toDataURL() : null;
                     
-                    canvas.style.width = rect.width + 'px';
-                    canvas.style.height = (isMobile ? 200 : 180) + 'px';
+                    this.canvas.width = rect.width * dpr;
+                    this.canvas.height = (isMobile ? 200 : 180) * dpr;
                     
-                    ctx.scale(dpr, dpr);
-                    ctx.strokeStyle = '#000';
-                    ctx.lineWidth = isMobile ? 3 : 2;
-                    ctx.lineCap = 'round';
-                    ctx.lineJoin = 'round';
-                }
+                    this.canvas.style.width = rect.width + 'px';
+                    this.canvas.style.height = (isMobile ? 200 : 180) + 'px';
+                    
+                    this.ctx.scale(dpr, dpr);
+                    this.ctx.strokeStyle = '#000';
+                    this.ctx.lineWidth = isMobile ? 4 : 3;
+                    this.ctx.lineCap = 'round';
+                    this.ctx.lineJoin = 'round';
+                    this.ctx.globalCompositeOperation = 'source-over';
+                    
+                    if (currentData && this.isCanvasReady) {
+                        const img = new Image();
+                        img.onload = () => {
+                            this.ctx.drawImage(img, 0, 0, this.canvas.width / dpr, this.canvas.height / dpr);
+                        };
+                        img.src = currentData;
+                    }
+                };
                 
                 resizeCanvas();
-                window.addEventListener('resize', resizeCanvas);
-                
-                canvas.addEventListener('mousedown', startDrawing);
-                canvas.addEventListener('mousemove', draw);
-                canvas.addEventListener('mouseup', stopDrawing);
-                canvas.addEventListener('mouseout', stopDrawing);
-                
-                canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-                canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-                canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-                
-                const clearBtn = document.getElementById('clear-signature');
-                if (clearBtn) {
-                    clearBtn.addEventListener('click', clearCanvas);
-                }
-            }
+                window.addEventListener('resize', this.debounce(resizeCanvas, 250));
+            },
             
-            function getPos(e) {
-                const rect = canvas.getBoundingClientRect();
-                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-                return {
-                    x: clientX - rect.left,
-                    y: clientY - rect.top
+            setupEventListeners: function() {
+                this.canvas.addEventListener('mousedown', (e) => this.startDrawing(e), { passive: false });
+                this.canvas.addEventListener('mousemove', (e) => this.draw(e), { passive: false });
+                this.canvas.addEventListener('mouseup', (e) => this.stopDrawing(e));
+                this.canvas.addEventListener('mouseleave', (e) => this.stopDrawing(e));
+                
+                this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
+                this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
+                this.canvas.addEventListener('touchend', (e) => this.stopDrawing(e), { passive: false });
+                this.canvas.addEventListener('touchcancel', (e) => this.stopDrawing(e), { passive: false });
+                
+                setTimeout(() => {
+                    const clearBtn = document.getElementById('clear-signature');
+                    if (clearBtn) {
+                        clearBtn.onclick = () => this.clearCanvas();
+                    }
+                }, 100);
+            },
+            
+            debounce: function(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
                 };
-            }
+            },
             
-            function startDrawing(e) {
-                isDrawing = true;
-                const pos = getPos(e);
-                lastX = pos.x;
-                lastY = pos.y;
+            getPos: function(e) {
+                if (!this.canvas) return { x: 0, y: 0 };
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
                 
-                ctx.beginPath();
-                ctx.moveTo(lastX, lastY);
-            }
+                const clientX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY);
+                
+                return {
+                    x: (clientX - rect.left) * scaleX / (window.devicePixelRatio || 1),
+                    y: (clientY - rect.top) * scaleY / (window.devicePixelRatio || 1)
+                };
+            },
             
-            function draw(e) {
-                if (!isDrawing) return;
+            startDrawing: function(e) {
+                if (!this.ctx) return;
+                e.preventDefault();
+                this.isDrawing = true;
+                const pos = this.getPos(e);
+                this.lastX = pos.x;
+                this.lastY = pos.y;
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.lastX, this.lastY);
+                this.ctx.lineTo(this.lastX, this.lastY);
+                this.ctx.stroke();
+            },
+            
+            draw: function(e) {
+                if (!this.isDrawing || !this.ctx) return;
                 e.preventDefault();
                 
-                const pos = getPos(e);
-                ctx.beginPath();
-                ctx.moveTo(lastX, lastY);
-                ctx.lineTo(pos.x, pos.y);
-                ctx.stroke();
+                const pos = this.getPos(e);
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.lastX, this.lastY);
+                this.ctx.lineTo(pos.x, pos.y);
+                this.ctx.stroke();
                 
-                lastX = pos.x;
-                lastY = pos.y;
+                this.lastX = pos.x;
+                this.lastY = pos.y;
                 
-                updateSignatureData();
-            }
+                this.updateSignatureData();
+            },
             
-            function stopDrawing() {
-                if (isDrawing) {
-                    isDrawing = false;
-                    updateSignatureData();
+            stopDrawing: function(e) {
+                if (this.isDrawing && this.ctx) {
+                    e && e.preventDefault();
+                    this.isDrawing = false;
+                    this.ctx.beginPath();
+                    this.updateSignatureData();
                 }
-            }
+            },
             
-            function handleTouchStart(e) {
+            handleTouchStart: function(e) {
                 e.preventDefault();
-                const touch = e.touches[0];
-                const mouseEvent = new MouseEvent('mousedown', {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY
-                });
-                canvas.dispatchEvent(mouseEvent);
-            }
-            
-            function handleTouchMove(e) {
-                e.preventDefault();
-                const touch = e.touches[0];
-                const mouseEvent = new MouseEvent('mousemove', {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY
-                });
-                canvas.dispatchEvent(mouseEvent);
-            }
-            
-            function handleTouchEnd(e) {
-                e.preventDefault();
-                const mouseEvent = new MouseEvent('mouseup', {});
-                canvas.dispatchEvent(mouseEvent);
-            }
-            
-            function clearCanvas() {
-                if (ctx) {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    updateSignatureData();
+                if (e.touches && e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    this.startDrawing({ 
+                        clientX: touch.clientX, 
+                        clientY: touch.clientY,
+                        preventDefault: () => {}
+                    });
                 }
-            }
+            },
             
-            function updateSignatureData() {
-                if (canvas) {
-                    const dataURL = canvas.toDataURL();
+            handleTouchMove: function(e) {
+                e.preventDefault();
+                if (e.touches && e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    this.draw({ 
+                        clientX: touch.clientX, 
+                        clientY: touch.clientY,
+                        preventDefault: () => {}
+                    });
+                }
+            },
+            
+            clearCanvas: function() {
+                if (this.ctx && this.canvas) {
+                    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                    this.updateSignatureData();
+                }
+            },
+            
+            updateSignatureData: function() {
+                if (this.canvas && this.ctx) {
+                    const dataURL = this.canvas.toDataURL('image/png');
                     const input = document.getElementById('signature_data');
                     if (input) {
                         input.value = dataURL;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        const inputEvent = new Event('input', { bubbles: true });
+                        const changeEvent = new Event('change', { bubbles: true });
+                        input.dispatchEvent(inputEvent);
+                        input.dispatchEvent(changeEvent);
                     }
                     
-                        const isEmpty = isCanvasEmpty();
+                    const isEmpty = this.isCanvasEmpty();
                     const checkmark = document.getElementById('signature-check');
                     if (checkmark) {
                         checkmark.style.display = isEmpty ? 'none' : 'inline';
                     }
                 }
-            }
+            },
             
-            function isCanvasEmpty() {
-                if (!canvas) return true;
+            isCanvasEmpty: function() {
+                if (!this.canvas || !this.ctx) return true;
                 const blank = document.createElement('canvas');
-                blank.width = canvas.width;
-                blank.height = canvas.height;
-                return canvas.toDataURL() === blank.toDataURL();
+                blank.width = this.canvas.width;
+                blank.height = this.canvas.height;
+                const blankCtx = blank.getContext('2d');
+                blankCtx.fillStyle = 'white';
+                blankCtx.fillRect(0, 0, blank.width, blank.height);
+                return this.canvas.toDataURL() === blank.toDataURL();
             }
+        };
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            window.SignatureCanvas.init();
             
-            initCanvas();
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList') {
+                        const canvas = document.getElementById('signature-canvas');
+                        if (canvas && canvas !== window.SignatureCanvas.canvas) {
+                            window.SignatureCanvas.reinit();
+                        }
+                    }
+                });
+            });
+            
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
         });
         
         async function captureScreenshot(){
@@ -1869,8 +1989,11 @@ def server(input, output, session):
         current_lang = language.get()
         current_content = waiver_content[current_lang]
 
+        participant_name = input.participant_name().strip()
+        capitalized_name = ' '.join(word.capitalize() for word in participant_name.split())
+        
         waiver_form_data = {
-            "name": input.participant_name(),
+            "name": capitalized_name,
             "agreement": True,
             "signature": input.signature_data(),
             "timestamp": today.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1887,16 +2010,15 @@ def server(input, output, session):
             print("[submit] Failed to generate server-side screenshot")
             screenshot_data = None
 
-        clean_name = input.participant_name().strip()
         import re
 
-        clean_name = re.sub(r"[^\w\s-]", "", clean_name)
+        clean_name = re.sub(r"[^\w\s-]", "", capitalized_name)
         clean_name = re.sub(r"[-\s]+", "_", clean_name)
         date_str = today.strftime("%Y%m%d")
         screenshot_filename = f"{clean_name}_{date_str}_screenshot.png"
 
         waiver_data = {
-            "name": input.participant_name(),
+            "name": capitalized_name,
             "signature": input.signature_data(),
             "date": today.isoformat(),
             "language": language.get(),
