@@ -44,7 +44,7 @@ waiver_content = {
         "signature_label": "Signature (Draw below)",
         "date_label": "Date",
         "submit_button": "Submit Waiver",
-        "switch_button": "Leer en Español",
+        "switch_button": "Español | 中文",
         "success_message": "Thank you! Your waiver has been submitted successfully.",
         "signature_placeholder": "Type your signature here or upload an image",
     },
@@ -73,9 +73,38 @@ waiver_content = {
         "signature_label": "Firma (Dibuje abajo)",
         "date_label": "Fecha",
         "submit_button": "Enviar Renuncia",
-        "switch_button": "Read in English",
+        "switch_button": "English | 中文",
         "success_message": "¡Gracias! Su renuncia ha sido enviada con éxito.",
         "signature_placeholder": "Escriba su firma aquí o suba una imagen",
+    },
+    "zh": {
+        "title": "自行车项目弃权和免责书",
+        "logo_text1": "希望之角",
+        "logo_subtext": "共享美食，共建社区",
+        "intro": "我明确承担并接受因使用希望之角公司自行车项目（包括维修服务、自行车、滑板车、滑板等交通设备以及所有设备和用品）而对我自己或他人造成的任何和所有伤害或死亡风险。本弃权和免责书包括任何和所有维修服务、设备，包括但不限于自行车、头盔、锁、灯、货架、篮子、内胎、轮胎、链条、制动器，以及我对该项目的参与。",
+        "points": [
+            "我是自愿参与者，自行承担使用项目服务和设备的风险。",
+            "我有责任保持自行车处于良好状态。我将在使用前检查自行车，确保所有部件都处于正常工作状态。",
+            "我理解骑自行车存在固有风险，即使自行车和设备处于良好工作状态并正确使用。伤害是骑自行车的常见、普通和可预见的后果。我理解可能遇到的风险包括但不限于以下内容：",
+        ],
+        "sub_points": [
+            "设备可能损坏或故障，造成财产损失或损害，或对我本人或他人造成伤害。",
+            "骑自行车需要体力消耗，可能导致不适、疼痛或受伤。",
+            "我可能在骑行时遇到危险，这可能导致我跌倒或被推动。",
+            "自行车出行是危险的。我可能因许多我无法控制的因素而受伤。",
+        ],
+        "volunteer_clause": "我理解我承担因自行车项目志愿者、员工或供应商为我提供的维修工作或服务而导致的任何设备损坏或故障的风险。我理解项目志愿者和员工不是经过培训或持有执照的专业人员，不能对我的设备损坏负责。我有责任检查工作，如果自行车或设备未处于良好工作状态，则不使用它们。",
+        "indemnify_clause": "我同意赔偿、辩护、拯救并使希望之角公司（包括项目的所有员工、志愿者、董事、管理人员、供应商和资助者）免受因我参与自行车项目或使用自行车、自行车设备和自行车维修服务而对任何个人或实体产生或导致的任何索赔、损失、损害或责任的损害。",
+        "release_clause": "我代表我本人、我的继承人、继任者和受让人，在此放弃、免除并永远解除希望之角公司（包括项目的所有员工、志愿者、董事、管理人员、供应商和资助者）因我参与自行车项目或使用自行车、自行车设备和自行车维修服务而对任何个人或实体产生或导致的任何和所有索赔、损失、损害或责任。",
+        "final_agreement": "我知道这是一份免责书。我是自由和自愿签署的，我认识并同意它对我本人、我的继承人和受让人具有约束力，如果我代表任何未成年人签署，我有充分的法律权力这样做，并意识到本合同对他们以及对我的约束效力。我同意允许希望之角公司将我的照片、视频或录音用于宣传和宣传目的。",
+        "agreement_check": "我已仔细阅读本协议，并理解这是一份免责书。我同意条款和条件。",
+        "print_name_label": "打印全名",
+        "signature_label": "签名（请在下方签名）",
+        "date_label": "日期",
+        "submit_button": "提交弃权书",
+        "switch_button": "English | Español",
+        "success_message": "谢谢！您的弃权书已成功提交。",
+        "signature_placeholder": "在此输入您的签名或上传图片",
     },
 }
 
@@ -227,7 +256,7 @@ app_ui = ui.page_fluid(
         body { 
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             min-height: 100vh;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
             line-height: 1.6;
         }
         
@@ -1455,7 +1484,8 @@ def server(input, output, session):
             )
             y += 20
 
-            lang_text = f"Language: {'English' if waiver_data.get('language') == 'en' else 'Spanish'}"
+            lang_mapping = {'en': 'English', 'es': 'Spanish', 'zh': 'Chinese'}
+            lang_text = f"Language: {lang_mapping.get(waiver_data.get('language'), 'Unknown')}"
             draw.text(
                 (margin, y), lang_text, fill="black", font=normal_font or title_font
             )
@@ -1757,7 +1787,7 @@ def server(input, output, session):
         today = datetime.now()
         if language.get() == "en":
             formatted_date = today.strftime("%B %d, %Y")
-        else:
+        elif language.get() == "es":
             months = [
                 "enero",
                 "febrero",
@@ -1773,6 +1803,8 @@ def server(input, output, session):
                 "diciembre",
             ]
             formatted_date = f"{today.day} de {months[today.month-1]} de {today.year}"
+        else:  # Chinese
+            formatted_date = f"{today.year}年{today.month}月{today.day}日"
 
         return f"{content['date_label']}: {formatted_date}"
 
@@ -1780,7 +1812,12 @@ def server(input, output, session):
     @reactive.event(input.language_switch)
     def toggle_language():
         current_lang = language.get()
-        new_lang = "es" if current_lang == "en" else "en"
+        if current_lang == "en":
+            new_lang = "es"
+        elif current_lang == "es":
+            new_lang = "zh"
+        else:
+            new_lang = "en"
         language.set(new_lang)
 
     @reactive.Effect
